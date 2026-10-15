@@ -37,7 +37,7 @@ button:disabled{background:#3b4450;color:#99a}button.go{background:#e0533b;font-
 <script>
 'use strict';
 // ===== 설정 (v6 3자 합의안) =====
-const CFG={RR_ON:1,RR_BOXK:{4:1,6:1,8:1},CAMD:12,DMG_K:1.4,SPEED:4.8,ROAD:1.6,LANE:1.067,RUN_T:60,BOSS_T:85,FIRE:2,VOLLEY:10,TRACERS:12,WALK:26,ZSPD:.7,CAP:100,HP_K:1,HPK:[1.25,1.15*.95,.8*.9,.58*.8,2.4*.85,1.5*.85,1.55*.85,1.35*.85,1.1*.85,.9*.85],CNTK:[1,1,.95,.9,.9,.9,.9,.9,.9,.9],TUNE:[1,1,.7,.55,1.4,1.5,1.2,2.2,2.1,2.4],BOSS_K:1,ATK_CAP:.4,START:3,REV_DIA:50,AD_DAY:10,AD_REV_DAY:3};
+const CFG={RR_ON:1,RR_BOXK:{4:1,6:1,8:1},CAMD:12,DMG_K:1.4,SPEED:4.8,ROAD:1.6,LANE:1.067,RUN_T:60,BOSS_T:85,FIRE:2,VOLLEY:10,TRACERS:12,WALK:26,ZSPD:.7,CAP:100,HP_K:1,HPK:[1.25,1.15*.95,.8*.9,.58*.8,2.4*.85,1.5*.85,1.55*.85,1.35*.85,1.1*.85,.9*.85],CNTK:[.72,.74,.72,.7,.78,.78,.78,.78,.78,.8],TUNE:[1,1,.7,.55,1.1,1.15,.95,1.65,1.55,1.75],BOSS_K:1,ATK_CAP:.4,START:3,REV_DIA:50,AD_DAY:10,AD_REV_DAY:3};
 const GATE_T=[5,18,32,46];
 // 위험/보상 구간 (S4/S6/S8): 23초 경고, 25~35초. D_s = 중간 실력 봇의 한 줄 좁은 대형 DPS (스테이지별 고정)
 const RR={4:{k:2,n:12,sp:1,t:2},6:{k:2.5,n:14,sp:1.1,t:1.8},8:{k:2.25,n:16,sp:1.15,t:1.6}},RR_D={4:1768,6:2491,8:2248};
@@ -94,7 +94,7 @@ function carry(s){if(s<=6)return {n:CFG.START,txt:`${CFG.START}명 시작 (1~6�
   const p=(S.surv||{})[s-1]||0,raw=Math.floor(p*.35),mn=s>=7?5:3,n=Math.max(mn,Math.min(8,raw));
   return {n,txt:`${n}명 시작 — 이전 ${p}명 ×35%=${raw}명`+(raw>8?' → 상한 8명':raw<mn?` → 최소 ${mn}명`:'')}}
 // ===== 별 3개 기준 (S1~10 고정, 1000시드 시뮬: T3=좋은 봇 25%분위 생존, T2=중간 봇 중앙값) =====
-const STAR_T={1:[41,50],2:[54,61],3:[46,52],4:[46,50],5:[54,67],6:[46,58],7:[35,40],8:[38,49],9:[56,62],10:[57,64]};
+const STAR_T={1:[41,51],2:[58,66],3:[49,57],4:[48,55],5:[53,68],6:[48,61],7:[38,40],8:[53,63],9:[61,75],10:[59,67]};
 const starT=s=>STAR_T[Math.min(s,10)]||[Math.max(2,STAR_T[10][0]),STAR_T[10][1]];
 const starsOf=(won,n,s)=>{if(!won)return 0;const [t2,t3]=starT(s);return n>=t3?3:n>=t2?2:1};
 const baseGold=s=>Math.floor(100+20*s);
@@ -201,6 +201,8 @@ function build(s){const I=stageInfo(s),r=rng(R.seed*7919+s*131+13);R.I=I;R.theme
   types.forEach(ty=>{acc+=hpOf(ty)/2;const goal=acc/tot*cum[600];while(k<600&&cum[k]<goal)k++;acc+=hpOf(ty)/2;
     const tm=Math.max(3,k/10),v=CFG.ZSPD*ENEMY[ty].spd,z=CFG.SPEED*(tm-CFG.WALK/(CFG.SPEED+v))+CFG.WALK;
     R.zs.push({type:ty,li:(r()*3)|0,x:0,z,hp:hpOf(ty),max:hpOf(ty),hit:0,burn:0});R.zs[R.zs.length-1].x=lanes()[R.zs[R.zs.length-1].li]});
+  {const GP=s<=4?1.6:1.1,GL=s<=4?.55:.4,E0=s<=4?18:12;R.zs.sort((a,b)=>a.z-b.z);const last=[-9,-9,-9];let pz=-9;   // 좀비 간격 확보: 같은 줄 최소 간격, 초반엔 더 넓게
+    for(const o of R.zs){const t_=(o.z-CFG.WALK)/CFG.SPEED,gl=GP*(t_<E0?1.5:1),ga=GL*(t_<E0?1.5:1);let li=o.li;const c=[0,1,2].sort((a,b)=>last[a]-last[b]);if(o.z-last[li]<gl&&o.z-last[c[0]]>=gl)li=c[0];o.li=li;o.x=lanes()[li];o.z=Math.max(o.z,last[li]+gl,pz+ga);last[li]=o.z;pz=o.z}}
   if(s==3||s==4){const tmOf=o=>(o.z-CFG.WALK)/CFG.SPEED+CFG.WALK/(CFG.SPEED+CFG.ZSPD*ENEMY[o.type].spd);   // 초반(16초 전) 탱크는 뒤쪽 일반 좀비와 자리 교환 (수는 그대로)
     for(const o of R.zs.filter(o=>o.type=='tank'&&tmOf(o)<16)){const n_=R.zs.find(q=>q.type=='normal'&&tmOf(q)>=16&&!q.sw);if(!n_)break;n_.sw=1;[o.type,n_.type]=[n_.type,o.type];const h=o.hp;o.hp=o.max=n_.hp;n_.hp=n_.max=h}}
   const LW=LASTWAVE[Math.min(s,10)-1],lastZ=CFG.SPEED*42;if(LW>0){const late=R.zs.filter(o=>o.z>lastZ),add=Math.round(late.length*LW);for(let i=0;i<add;i++){const o=late[(i*7)%late.length];R.zs.push({...o,li:(o.li+1+(i%2))%3,z:o.z+1.3,hit:0,burn:0});R.zs[R.zs.length-1].x=lanes()[R.zs[R.zs.length-1].li]}}
