@@ -37,7 +37,7 @@ button:disabled{background:#3b4450;color:#99a}button.go{background:#e0533b;font-
 <script>
 'use strict';
 // ===== 설정 (v6 3자 합의안) =====
-const CFG={BXSP:{4:1,9:1.6289},RR_ON:0,RR_BOXK:{4:1,6:1,8:1},CAMD:12,DMG_K:1.4,SPEED:4.8,ROAD:1.6,LANE:1.067,RUN_T:60,BOSS_T:85,FIRE:2,VOLLEY:10,TRACERS:12,WALK:26,ZSPD:.7,CAP:100,HP_K:1,HPK:[1.25,1.15*.95,.8*.9,.58*.8,2.4*.85*0.5688*0.6302,1.5*.85*.9025,1.55*.85*0.8574,1.35*.85,1.1*.85,.9*.85],CNTK:[.72,.74,.72,.7,.9,.9,.9,.9,.9,.9*1.6289],TUNE:[1,1,.7,.55,1.6,1.35,1.85,1.75,3.6,4.1],BOSS_K:1,ATK_CAP:.4,START:3,REV_DIA:50,AD_DAY:10,AD_REV_DAY:3};
+const CFG={BXSP:{4:1.05**6,9:1.6289*1.05},RR_ON:0,RR_BOXK:{4:1,6:1,8:1},CAMD:12,DMG_K:1.4,SPEED:4.8,ROAD:1.6,LANE:1.067,RUN_T:60,BOSS_T:85,FIRE:2,VOLLEY:10,TRACERS:12,WALK:26,ZSPD:.7,CAP:100,HP_K:1,HPK:[1.25,1.15*.95,.8*.9,.58*.8,2.4*.85*0.5688*0.6302*.95**6,1.5*.85*.9025,1.55*.85*0.8574,1.35*.85,1.1*.85,.9*.85],CNTK:[.72,.74,.72,.7,.9,.9,.9*1.05,.9,.9,.9*1.6289],TUNE:[1,1,.7,.55,1.6,1.35,1.85,1.75,3.6,4.1],BOSS_K:1,ATK_CAP:.4,START:3,REV_DIA:50,AD_DAY:10,AD_REV_DAY:3};
 const GATE_T=[5,18,32,46];
 // 위험/보상 구간 (S4/S6/S8): 23초 경고, 25~35초. D_s = 중간 실력 봇의 한 줄 좁은 대형 DPS (스테이지별 고정)
 const RR={4:{k:2,n:12,sp:1,t:2},6:{k:2.5,n:14,sp:1.1,t:1.8},8:{k:2.25,n:16,sp:1.15,t:1.6}},RR_D={4:1768,6:2491,8:2248};
@@ -195,8 +195,8 @@ function build(s){const I=stageInfo(s),r=rng(R.seed*7919+s*131+13);R.I=I;R.theme
   // 좀비: 예상 병력 곡선에 비례해 배치 (부하 일정)
   const p=I.path,start=R.startN,E=[];let n=start;const MUL=s<=4?2:3,RV=RECRUIT[Math.min(s,10)-1],ev=CFG.RR_ON&&RR[s]?[[5,5],[10,5],[18,'x'],[21,RV],[23,RV],[37,10],[41,5],[46,10]]:[[5,5],[10,5],[18,'x'],[24,RV],[28,RV],[32,10],[38,5],[46,10]];
   for(let k=0;k<=600;k++){const tt=k/10;for(const e of ev)if(Math.abs(e[0]-tt)<.05)n=Math.min(100,e[1]=='x'?n*MUL:n+e[1]);E.push(n)}
-  const cum=[0];for(let k=1;k<=600;k++)cum.push(cum[k-1]+(k/10>=2&&k/10<=58&&!gateT(s).some(gt=>k/10>=gt-.2&&k/10<=gt+2.6)&&!(CFG.RR_ON&&RR[s]&&k/10>=24.5&&k/10<=35.5)?E[k]:0));
-  const [cn,cf,ct]=I.cnt,N=cn+cf+ct,types=new Array(N).fill('normal');
+  const cum=[0];for(let k=1;k<=600;k++)cum.push(cum[k-1]+(k/10>=2&&k/10<=58&&!gateT(s).some(gt=>k/10>=gt-.2&&k/10<=gt+2.6)&&!(CFG.RR_ON&&RR[s]&&k/10>=24.5&&k/10<=35.5)?E[k]*(s==5?S5W(k/10):1):0));
+  let [cn,cf,ct]=I.cnt;if(s==5){cn=Math.round(cn*S5M);cf=Math.round(cf*S5M);ct=Math.round(ct*S5M)}const N=cn+cf+ct,types=new Array(N).fill('normal');
   const place=(m,ty)=>{for(let j=0;j<m;j++){let idx=Math.floor((j+.5)*N/m);while(types[idx]!='normal')idx=(idx+1)%N;types[idx]=ty}};place(ct,'tank');place(cf,'fast');
   const hpOf=ty=>I.hp*ENEMY[ty].k,tot=types.reduce((a,ty)=>a+hpOf(ty),0);let acc=0,k=0;
   types.forEach(ty=>{acc+=hpOf(ty)/2;const goal=acc/tot*cum[600];while(k<600&&cum[k]<goal)k++;acc+=hpOf(ty)/2;
@@ -239,7 +239,9 @@ addEventListener('keydown',e=>{if(!R)return;if(e.key=='ArrowLeft')R.tx=clampX(R.
 const clampX=x=>R&&R.bx?Math.max(-.85*CFG.LANE,Math.min(.85*CFG.LANE,x)):Math.max(-CFG.ROAD+.25,Math.min(CFG.ROAD-.25,x));
 // ===== 전투 =====
 const atkMul=()=>(1+R.atk)*(1+S.wp*.05),rateMul=()=>R.buf.rate>0?1.3:1;
-const soldierDps=()=>{const G=GUNS[R.gun];return rateMul()*DMG[R.gl]*G.mul*G.dm*GB/G.iv*atkMul()};
+const S5W=t=>{const p=(t-2)/56;return p<.35?.9:p<.65?1:1.15},S5M=.35*.9+.3+.35*1.15;   // v7e: S5 일반 웨이브 진행도별 출현 배율
+const fallK=()=>{const N=Math.max(1,Math.min(R.n,100));return N<=40?1:(40+.65*(N-40))/N};   // v7e: 40명 넘으면 화력 증가 둔화 E=min(N,40)+.65(N-40)
+const soldierDps=()=>{const G=GUNS[R.gun];return rateMul()*DMG[R.gl]*G.mul*G.dm*GB/G.iv*atkMul()*fallK()};
 // ===== 대형: 그림 위치 = 사격 위치 =====
 // 1~15명 한 줄 최대 5명(0.8줄 폭), 16~40명 10명(1.8줄), 41~100명 15명(2.8줄). 도로 밖으로 나갈 칸은 뒷줄로 접음. 게이트 0.8초 전엔 0.8줄로 좁힘
 // 병사 간격표 (최대 가로 / 옆 간격(줄) / 앞뒤 간격(h) / 최대 줄 수). 1~15명은 항상, 16명+는 압축 때(게이트·위험 구간)만 사용
@@ -265,7 +267,7 @@ function updateSquad(dt){const N=Math.min(R.n,100);R.squeeze=!R.fight&&(R.gates.
   R.hw=(R.hw??R.hwT)+(R.hwT-(R.hw??R.hwT))*k;
   for(const q of R.sq)if(q.lv){q.lv-=dt;q.sc=Math.max(0,q.lv/.25)}R.sq=R.sq.filter(q=>!q.lv||q.lv>0);
   // 병사마다 초당 2발, 각자 엇갈린 타이밍. 피해는 병사별 합산 (표시 제한 없음)
-  const G=GUNS[R.gun],DK=R.stage>=8?1.2:CFG.DMG_K,d=DMG[R.gl]*G.mul*G.dm*GB*atkMul()*DK,rm=rateMul(),zE=R.z+.3;
+  const G=GUNS[R.gun],DK=R.stage>=8?1.2:CFG.DMG_K,d=DMG[R.gl]*G.mul*G.dm*GB*atkMul()*DK*fallK(),rm=rateMul(),zE=R.z+.3;
   for(const q of R.sq){q.mf=Math.max(0,q.mf-dt);if(q.lv||q.sc<.5)continue;q.ph+=dt*rm/G.iv;   // 발사 진행도(0~1)는 총을 바꿔도 유지
     while(q.ph>=1){q.ph-=1;q.mf=.03;const x=R.x+q.ox+(R.bx?0:.0624*sqSC()),z0=R.z+q.oz+.2;
       if(G.id=='shotgun'){const shot={sp:new Set};shot.m=0;for(const dx of[-.06,0,.06])R.bul.push({x:x+dx,z:z0,zs:z0,v:45,end:zE+G.range,dmg:d/3,sd:d,shot,pierce:0,col:G.col,sg:1})}
