@@ -5,343 +5,286 @@
 html,body{margin:0;height:100%;background:#9fd3f5;overflow:hidden;font-family:system-ui,sans-serif;touch-action:none}
 #wrap{position:relative;height:100%;max-width:calc(100vh*9/16);margin:0 auto}
 canvas{display:block;width:100%;height:100%}
-#cnt{position:absolute;left:50%;transform:translateX(-50%);bottom:4%;background:rgba(20,60,140,.82);color:#fff;border:3px solid #7fd0ff;border-radius:22px;padding:4px 16px 4px 10px;font-weight:900;font-size:24px;display:flex;align-items:center;gap:6px;box-shadow:0 3px 0 #0b2d66}
+#cnt{position:absolute;left:50%;transform:translate(-50%,-100%);top:70%;background:rgba(20,60,140,.82);color:#fff;border:3px solid #7fd0ff;border-radius:22px;padding:4px 16px 4px 10px;font-weight:900;font-size:24px;display:flex;align-items:center;gap:6px;box-shadow:0 3px 0 #0b2d66}
 #cnt svg{width:28px;height:28px}
 #ui{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px}
 #ui button{font-weight:900;font-size:15px;border:0;border-radius:12px;padding:6px 10px;background:#fff;color:#1a4da8;box-shadow:0 3px 0 #1a4da8}
 #ui button.on{background:#ffd23f}
-#fps{position:absolute;left:6px;top:6px;color:#fff;font:12px monospace;text-shadow:0 1px 2px #000;display:none}
+#ui2{position:absolute;top:8px;left:8px;display:flex;gap:4px;align-items:center;font:800 12px system-ui;color:#fff;text-shadow:0 1px 2px #000}#ui2 button{font-weight:900;font-size:13px;border:0;border-radius:10px;padding:4px 7px;background:#fff;color:#1a4da8}#ui2 button.on{background:#ffd23f}
+#fps{position:absolute;left:6px;bottom:6px;color:#fff;font:12px monospace;text-shadow:0 1px 2px #000;display:none}
 </style>
 <script type="importmap">{"imports":{"three":"./lib/three.module.min.js","three/addons/":"./lib/addons/"}}</script>
 </head><body><div id="wrap"><canvas id="c"></canvas>
 <div id="cnt"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="5" fill="#3b8cff"/><path d="M6 9a6 6 0 0 1 12 0z" fill="#2563d6"/><rect x="6" y="14" width="12" height="9" rx="4" fill="#3b8cff"/></svg><span id="num">5</span></div>
 <div id="ui"><button data-n="5">5</button><button data-n="10">10</button><button data-n="30">30</button><button data-n="100">100</button></div>
-<div id="fps"></div></div>
+<div id="ui2"><span>보이는 병사</span><button data-s="0">v9</button><button data-s="20">20</button><button data-s="30">30</button><button data-s="40">40</button></div><div id="fps"></div></div>
 <script type="module">
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/GLTFLoader.js';
 import {RoundedBoxGeometry} from 'three/addons/RoundedBoxGeometry.js';
 import {RoomEnvironment} from 'three/addons/RoomEnvironment.js';
+import * as SkeletonUtils from 'three/addons/SkeletonUtils.js';
+import {mergeGeometries} from 'three/addons/BufferGeometryUtils.js';
 
+// ===== v9 constants (copied 1:1 from preview/index.html) =====
+const CFG={CAMD:12,SPEED:4.8,ROAD:1.6,LANE:1.067};
 const Q=new URLSearchParams(location.search);
-let REAL=+(Q.get('n')||5);
-const SPEED=+(Q.get('speed')||6);
+const PHASE=Q.get('phase'); // null=cycle, 'gate', 'boss'
 const canvas=document.getElementById('c');
 const R=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
 R.setPixelRatio(Math.min(devicePixelRatio,+(Q.get('pr')||1.75)));
 R.outputColorSpace=THREE.SRGBColorSpace;R.toneMapping=THREE.ACESFilmicToneMapping;R.toneMappingExposure=1.0;
-const S=new THREE.Scene();
-S.fog=new THREE.Fog(0xcfe9ff,70,160);
+const S=new THREE.Scene();S.fog=new THREE.Fog(0xcfe9ff,40,95);
 const pm=new THREE.PMREMGenerator(R);S.environment=pm.fromScene(new RoomEnvironment(),0.04).texture;S.environmentIntensity=0.55;
-const cam=new THREE.PerspectiveCamera(40,9/16,0.5,300);
-
-// ---------- lights
-S.add(new THREE.HemisphereLight(0xcfe8ff,0x7a6a45,1.05));
-const sun=new THREE.DirectionalLight(0xfff1d6,2.6);sun.position.set(-6,14,10);S.add(sun);
+const cam=new THREE.PerspectiveCamera(40,9/16,0.1,200);
+S.add(new THREE.HemisphereLight(0xcfe8ff,0x6a5a3a,0.85));
+const sun=new THREE.DirectionalLight(0xfff1d6,3.0);sun.position.set(-6,14,10);S.add(sun);
 const rim=new THREE.DirectionalLight(0xffe0b0,0.9);rim.position.set(8,6,-20);S.add(rim);
-
-// ---------- helpers
 const M=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:0.5,metalness:0},o));
 function canvasTex(w,h,f){const c=document.createElement('canvas');c.width=w;c.height=h;f(c.getContext('2d'),w,h);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t}
 const rnd=(a,b)=>a+Math.random()*(b-a);
 
-// ---------- sky
-{const g=new THREE.SphereGeometry(200,24,12);const m=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,
- uniforms:{},vertexShader:'varying vec3 p;void main(){p=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+// ===== v9 camera: fixed pinhole, CAMD behind squad, horizon at .17H, squad front at .76H =====
+let W=1,H=1,F=1,HOR=0,CAMH=1;
+function fit(){W=canvas.clientWidth;H=canvas.clientHeight;R.setSize(W,H,false);const CD=CFG.CAMD;
+ F=Math.min(0.45*W*CD/CFG.ROAD,0.62*H*CD/CFG.ROAD);HOR=H*0.17;CAMH=(H*0.76-HOR)*CD/F;
+ cam.aspect=W/H;cam.fov=2*Math.atan(H/2/F)*180/Math.PI;cam.position.set(0,CAMH,CD);cam.lookAt(0,CAMH,0);
+ cam.setViewOffset(W,H,0,H/2-HOR,W,H);cam.updateProjectionMatrix()}
+addEventListener('resize',fit);
+
+// ===== sky (camera-relative) =====
+{const g=new THREE.SphereGeometry(150,24,12);const m=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,
+ vertexShader:'varying vec3 p;void main(){p=normalize(position);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
  fragmentShader:'varying vec3 p;void main(){float h=clamp(p.y*2.2,0.,1.);vec3 c=mix(vec3(.86,.94,1.),vec3(.33,.62,.95),pow(h,.7));gl_FragColor=vec4(c,1.);}'});
  S.add(new THREE.Mesh(g,m));
- // clouds: instanced puffy spheres
- const cg=new THREE.SphereGeometry(1,12,8);const cm=M(0xffffff,{roughness:1,emissive:0xffffff,emissiveIntensity:0.35,fog:false});
- const cl=new THREE.InstancedMesh(cg,cm,60);const mm=new THREE.Matrix4();let k=0;
- for(let i=0;i<10;i++){const cx=rnd(-90,90),cy=rnd(28,55),cz=rnd(-170,-130);for(let j=0;j<6;j++){const s=rnd(4,9);mm.compose(new THREE.Vector3(cx+rnd(-10,10),cy+rnd(-2,3),cz+rnd(-4,4)),new THREE.Quaternion(),new THREE.Vector3(s*1.4,s*0.7,s));cl.setMatrixAt(k++,mm)}}
- S.add(cl);}
+ const cl=new THREE.InstancedMesh(new THREE.SphereGeometry(1,12,8),M(0xffffff,{roughness:1,emissive:0xffffff,emissiveIntensity:0.35,fog:false}),60);const mm=new THREE.Matrix4();let k=0;
+ for(let i=0;i<10;i++){const cx=rnd(-60,60),cy=rnd(16,34),cz=rnd(-120,-95);for(let j=0;j<6;j++){const s=rnd(3,6);mm.compose(new THREE.Vector3(cx+rnd(-7,7),cy+rnd(-1.5,2),cz+rnd(-3,3)),new THREE.Quaternion(),new THREE.Vector3(s*1.4,s*0.7,s));cl.setMatrixAt(k++,mm)}}S.add(cl)}
 
-// ---------- road texture
-const ROADW=9;
+// ===== environment: built in "env units" (road 9 wide), scaled so road = 2*ROAD = 3.2 v9 units =====
+const ROADW=9,K=2*CFG.ROAD/ROADW;const ENV=new THREE.Group();ENV.scale.setScalar(K);S.add(ENV);
 const roadTex=canvasTex(512,1024,(x,w,h)=>{x.fillStyle='#5d6168';x.fillRect(0,0,w,h);
  for(let i=0;i<9000;i++){const v=70+Math.random()*60|0;x.fillStyle=`rgba(${v},${v+3},${v+8},${Math.random()*.5})`;x.fillRect(Math.random()*w,Math.random()*h,2+Math.random()*3,2+Math.random()*3)}
  for(let i=0;i<14;i++){x.strokeStyle='rgba(30,30,35,.18)';x.lineWidth=1+Math.random()*2;x.beginPath();let px=Math.random()*w,py=Math.random()*h;x.moveTo(px,py);for(let j=0;j<5;j++){px+=rnd(-30,30);py+=rnd(-30,30);x.lineTo(px,py)}x.stroke()}
  x.fillStyle='#f4f4ee';x.fillRect(18,0,14,h);x.fillRect(w-32,0,14,h);
- for(const lx of [w/3,2*w/3])for(let y=0;y<h;y+=256){x.fillRect(lx-7,y+40,14,150)}});
+ for(const lx of [w/3,2*w/3])for(let y=0;y<h;y+=256)x.fillRect(lx-7,y+40,14,150)});   // lane lines at ±LANE/2 (3 lanes like v9)
 roadTex.wrapS=roadTex.wrapT=THREE.RepeatWrapping;roadTex.repeat.set(1,8);
-const road=new THREE.Mesh(new THREE.PlaneGeometry(ROADW,160),M(0xffffff,{map:roadTex,roughness:0.8}));road.rotation.x=-Math.PI/2;road.position.z=-60;S.add(road);
-// ground grass + dirt shoulders
+{const road=new THREE.Mesh(new THREE.PlaneGeometry(ROADW,160),M(0xffffff,{map:roadTex,roughness:0.8}));road.rotation.x=-Math.PI/2;road.position.z=-60;ENV.add(road)}
+const curbTex=canvasTex(64,256,(x,w,h)=>{for(let i=0;i<4;i++){x.fillStyle=i%2?'#f4f4f0':'#e0352b';x.fillRect(0,i*64,w,64)}});curbTex.wrapS=curbTex.wrapT=THREE.RepeatWrapping;curbTex.repeat.set(1,40);
+for(const sx of [-1,1]){const c=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.3,160),M(0xffffff,{map:curbTex,roughness:0.45}));c.position.set(sx*(ROADW/2+0.35),0.15,-60);ENV.add(c)}
 const grassTex=canvasTex(256,256,(x,w,h)=>{x.fillStyle='#6fbf4a';x.fillRect(0,0,w,h);for(let i=0;i<3000;i++){x.fillStyle=Math.random()<.5?'#5aa83c':'#84d05a';x.fillRect(Math.random()*w,Math.random()*h,2,4)}});
 grassTex.wrapS=grassTex.wrapT=THREE.RepeatWrapping;grassTex.repeat.set(4,40);
-for(const sx of [-1,1]){const gm=new THREE.Mesh(new THREE.PlaneGeometry(14,160),M(0xffffff,{map:grassTex,roughness:0.95}));gm.rotation.x=-Math.PI/2;gm.position.set(sx*(ROADW/2+7),-0.02,-60);S.add(gm);gm.userData.tex=1;}
-// sea
-const sea=new THREE.Mesh(new THREE.PlaneGeometry(400,300),M(0x2fa6d8,{roughness:0.15,metalness:0.1,emissive:0x0a3550,emissiveIntensity:0.3}));sea.rotation.x=-Math.PI/2;sea.position.set(0,-4,-100);S.add(sea);
-// cliffs (rounded rocky walls) beyond grass
+for(const sx of [-1,1]){const gm=new THREE.Mesh(new THREE.PlaneGeometry(14,160),M(0xffffff,{map:grassTex,roughness:0.95}));gm.rotation.x=-Math.PI/2;gm.position.set(sx*(ROADW/2+7),-0.02,-60);ENV.add(gm)}
+{const sea=new THREE.Mesh(new THREE.PlaneGeometry(400,300),M(0x2fa6d8,{roughness:0.15,metalness:0.1,emissive:0x0a3550,emissiveIntensity:0.3}));sea.rotation.x=-Math.PI/2;sea.position.set(0,-4,-100);ENV.add(sea)}
 {const g=new THREE.DodecahedronGeometry(1,1);const m=M(0x9b8b78,{roughness:0.85,flatShading:true});const n=70;const im=new THREE.InstancedMesh(g,m,n);const mm=new THREE.Matrix4();
- for(let i=0;i<n;i++){const sx=i%2?1:-1;const s=rnd(2.5,4.5);mm.compose(new THREE.Vector3(sx*(ROADW/2+14+rnd(-1,2)),-2.5+rnd(-.5,.5),-i*2.3+10),new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(0,3),rnd(0,3),0)),new THREE.Vector3(s,s*1.1,s));im.setMatrixAt(i,mm)}S.add(im);}
-// distant hills + far castle-ish block silhouette
+ for(let i=0;i<n;i++){const sx=i%2?1:-1;const s=rnd(2.5,4.5);mm.compose(new THREE.Vector3(sx*(ROADW/2+14+rnd(-1,2)),-2.5+rnd(-.5,.5),-i*2.3+10),new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(0,3),rnd(0,3),0)),new THREE.Vector3(s,s*1.1,s));im.setMatrixAt(i,mm)}ENV.add(im)}
 {const g=new THREE.SphereGeometry(1,20,10);const m=M(0x5fae4a,{roughness:0.9});
- for(const [x,z,s,h] of [[-40,-120,30,10],[-10,-140,30,12],[25,-130,35,9],[55,-115,25,8],[-70,-105,25,9]]){const k=new THREE.Mesh(g,m);k.scale.set(s,h,s*0.6);k.position.set(x,-3,z);S.add(k)}
-}
-
-// ---------- scrolling world registry
-const scrollers=[]; // {setZ(z), z, len}
-const LOOP=90, ZNEAR=14;
-
-// blob shadow texture
-const blobTex=canvasTex(64,64,(x,w,h)=>{const g=x.createRadialGradient(32,32,2,32,32,31);g.addColorStop(0,'rgba(0,0,0,.55)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,64,64)});
+ for(const [x,z,s,h] of [[-40,-120,30,10],[-10,-140,30,12],[25,-130,35,9],[55,-115,25,8],[-70,-105,25,9]]){const k=new THREE.Mesh(g,m);k.scale.set(s,h,s*0.6);k.position.set(x,-3,z);ENV.add(k)}}
+const scrollers=[];const LOOP=90,ZNEAR=42;   // env units (camera is 12 v9u = 34 env u behind squad)
+const blobTex=canvasTex(64,64,(x)=>{const g=x.createRadialGradient(32,32,2,32,32,31);g.addColorStop(0,'rgba(0,0,0,.55)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,64,64)});
 const blobMat=new THREE.MeshBasicMaterial({map:blobTex,transparent:true,depthWrite:false});
 const blobGeo=new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2);
+const loader=new GLTFLoader();const loadGLB=u=>new Promise((res,rej)=>loader.load(u,g=>res(g.scene),undefined,rej));
+function instFrom(scene,count,tint){scene.updateMatrixWorld(true);const parts=[];
+ scene.traverse(o=>{if(o.isMesh){const m=o.material.clone();m.roughness=Math.min(m.roughness,0.6);m.metalness=0;if(tint)tint(m);const im=new THREE.InstancedMesh(o.geometry,m,count);im.userData.base=o.matrixWorld.clone();im.frustumCulled=false;ENV.add(im);parts.push(im)}});
+ const t=new THREE.Matrix4();return {set(i,mat){for(const p of parts){t.multiplyMatrices(mat,p.userData.base);p.setMatrixAt(i,t)}},done(){for(const p of parts)p.instanceMatrix.needsUpdate=true}}}
+function decor(inst,items){const mm=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3(),sc=new THREE.Vector3();
+ scrollers.push({upd(dz){for(let i=0;i<items.length;i++){const it=items[i];it.z+=dz;if(it.z>ZNEAR)it.z-=LOOP;q.setFromEuler(new THREE.Euler(0,it.ry||0,0));v.set(it.x,it.y||0,it.z);sc.setScalar(it.s||1);mm.compose(v,q,sc);inst.set(i,mm)}inst.done()}})}
 
-// ---------- GLB -> instanced
-const loader=new GLTFLoader();
-const loadGLB=u=>new Promise((res,rej)=>loader.load(u,g=>res(g.scene),undefined,rej));
-function instFrom(scene,count,tint){
- scene.updateMatrixWorld(true);const parts=[];
- scene.traverse(o=>{if(o.isMesh){const m=o.material.clone();m.roughness=Math.min(m.roughness,0.6);m.metalness=0;if(tint)tint(m);const im=new THREE.InstancedMesh(o.geometry,m,count);im.userData.base=o.matrixWorld.clone();im.frustumCulled=false;S.add(im);parts.push(im)}});
- const t=new THREE.Matrix4();
- return {set(i,mat){for(const p of parts){t.multiplyMatrices(mat,p.userData.base);p.setMatrixAt(i,t)}},done(){for(const p of parts)p.instanceMatrix.needsUpdate=true}};
-}
-// placed scrolling decoration instanced group
-function decor(inst,items){ // items: [{x,z,s,ry,y}]
- const mm=new THREE.Matrix4(),q=new THREE.Quaternion(),v=new THREE.Vector3(),sc=new THREE.Vector3();
- scrollers.push({upd(dz){for(let i=0;i<items.length;i++){const it=items[i];it.z+=dz;if(it.z>ZNEAR)it.z-=LOOP;q.setFromEuler(new THREE.Euler(0,it.ry||0,0));v.set(it.x,it.y||0,it.z);sc.setScalar(it.s||1);mm.compose(v,q,sc);inst.set(i,mm)}inst.done()}});
-}
+// ===== shared character geometry/materials =====
+const G={sph:new THREE.SphereGeometry(1,14,10),cap:new THREE.CapsuleGeometry(0.5,1,3,10),helm:new THREE.SphereGeometry(1,18,8,0,Math.PI*2,0,Math.PI*0.55),brim:new THREE.CylinderGeometry(1,1,0.12,18),rbox:new RoundedBoxGeometry(1,1,1,2,0.22),gun:new RoundedBoxGeometry(1,1,1,1,0.12)};
+const mat={blue:M(0x3d8cf0,{roughness:0.42}),navy:M(0x2a4f9a,{roughness:0.5}),helm:M(0x2f7df2,{roughness:0.22,metalness:0.1,envMapIntensity:1.4}),
+ skin:M(0xf2b98d),olive:M(0x8b8f4a,{roughness:0.55}),olive2:M(0x6e7238,{roughness:0.6}),boot:M(0x3a2f28,{roughness:0.6}),gun:M(0x2b2d33,{roughness:0.35,metalness:0.4}),
+ zskin:M(0xffffff,{roughness:0.55}),zshirt:M(0xffffff,{roughness:0.7}),zpants:M(0xffffff,{roughness:0.7}),eye:new THREE.MeshBasicMaterial({color:0xffe14a})};
 
-// ---------- gate
-const gate=new THREE.Group();S.add(gate);
-{const stone=M(0x6f7a86,{roughness:0.55,metalness:0.15});const dark=M(0x3d4550,{roughness:0.5});
- const glow=new THREE.MeshBasicMaterial({color:0x6fe3ff,toneMapped:false});
- const pg=new RoundedBoxGeometry(1.3,3.4,1.3,3,0.18);
- for(const sx of [-1,1]){const p=new THREE.Mesh(pg,stone);p.position.set(sx*3.9,1.7,0);gate.add(p);
-  const cap=new THREE.Mesh(new RoundedBoxGeometry(1.55,0.4,1.55,2,0.12),dark);cap.position.set(sx*3.9,3.5,0);gate.add(cap);
-  const base=new THREE.Mesh(new RoundedBoxGeometry(1.6,0.4,1.6,2,0.12),dark);base.position.set(sx*3.9,0.2,0);gate.add(base);
-  const strip=new THREE.Mesh(new THREE.BoxGeometry(0.18,2.6,0.08),glow);strip.position.set(sx*3.9-sx*0.66,1.75,0.3);gate.add(strip);
-  const st2=strip.clone();st2.position.set(sx*3.9,1.75,0.68);st2.scale.set(1.2,1,1);gate.add(st2);}
- // panel
- const iconTex=canvasTex(512,256,(x,w,h)=>{const g=x.createLinearGradient(0,0,0,h);g.addColorStop(0,'rgba(90,190,255,.55)');g.addColorStop(1,'rgba(30,120,255,.35)');x.fillStyle=g;x.fillRect(0,0,w,h);
-  const fig=(cx,cy,s)=>{x.save();x.translate(cx,cy);x.scale(s,s);x.fillStyle='rgba(225,248,255,.95)';x.strokeStyle='rgba(120,220,255,1)';x.lineWidth=4;
-   x.beginPath();x.arc(0,-38,26,Math.PI,0);x.lineTo(34,-34);x.lineTo(-34,-34);x.closePath();x.fill();x.stroke(); // helmet
-   x.beginPath();x.arc(0,-24,18,0,Math.PI*2);x.fill(); // head
-   x.beginPath();x.moveTo(-40,60);x.quadraticCurveTo(-42,0,-20,-4);x.lineTo(20,-4);x.quadraticCurveTo(42,0,40,60);x.closePath();x.fill();x.stroke();x.restore()};
-  x.shadowColor='#7fe6ff';x.shadowBlur=24;fig(150,150,1.0);fig(362,150,1.0);fig(256,140,1.35);
-  x.font='900 70px system-ui';x.fillStyle='#fff';x.textAlign='center';x.fillText('+',256,240)});
- const panel=new THREE.Mesh(new THREE.PlaneGeometry(6.5,3.0),new THREE.MeshBasicMaterial({map:iconTex,transparent:true,depthWrite:false,side:THREE.DoubleSide,toneMapped:false}));panel.position.set(0,1.75,0);gate.add(panel);
- // glowing rim frame
- const fr=(w,h,x,y)=>{const b=new THREE.Mesh(new THREE.BoxGeometry(w,h,0.14),glow);b.position.set(x,y,0.02);gate.add(b)};
- fr(6.6,0.14,0,3.25);fr(6.6,0.14,0,0.25);fr(0.14,3.0,-3.25,1.75);fr(0.14,3.0,3.25,1.75);
- // soft additive halo
- const haloTex=canvasTex(128,64,(x,w,h)=>{const g=x.createRadialGradient(64,32,4,64,32,62);g.addColorStop(0,'rgba(110,220,255,.9)');g.addColorStop(1,'rgba(110,220,255,0)');x.fillStyle=g;x.fillRect(0,0,w,h)});
- const halo=new THREE.Mesh(new THREE.PlaneGeometry(10,5),new THREE.MeshBasicMaterial({map:haloTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:0.55}));halo.position.set(0,1.8,-0.1);gate.add(halo);
- gate.userData.halo=halo;
- const gb=new THREE.Mesh(blobGeo,blobMat);gb.scale.set(9,1,2.2);gb.position.y=0.02;gate.add(gb);}
-gate.position.z=-26;
+// ===== gates: v9 lane-split panels spanning x0..x1, height 1.2 =====
+const GCOL={add:0x21a85a,mul:0x2f7fe8,sub:0xe0393b};
+function iconTex(txt,col,sub){return canvasTex(512,512,(x,w,h)=>{const c='#'+col.toString(16).padStart(6,'0');const g=x.createLinearGradient(0,0,0,h);g.addColorStop(0,c+'b0');g.addColorStop(1,c+'70');x.fillStyle=g;x.fillRect(0,0,w,h);
+ x.save();x.translate(256,300);x.scale(.75,.75);x.fillStyle='rgba(235,250,255,.95)';x.shadowColor='#fff';x.shadowBlur=20;
+ x.beginPath();x.arc(0,-40,52,Math.PI,0);x.lineTo(62,-34);x.lineTo(-62,-34);x.closePath();x.fill();x.beginPath();x.arc(0,-14,34,0,7);x.fill();
+ x.beginPath();x.moveTo(-70,100);x.quadraticCurveTo(-74,20,-34,14);x.lineTo(34,14);x.quadraticCurveTo(74,20,70,100);x.closePath();x.fill();x.restore();
+ x.textAlign='center';x.font='900 130px system-ui';x.lineWidth=14;x.strokeStyle='#0b0f0c';x.strokeText(txt,256,130);x.fillStyle='#fff';x.fillText(txt,256,130);x.font='900 64px system-ui';x.lineWidth=10;x.strokeText(sub,256,470);x.fillText(sub,256,470)})}
+function makeGate(x0,x1,op,txt,sub){const g=new THREE.Group();const w=(x1-x0)*0.8,h=1.2,col=GCOL[op];
+ const stone=M(0x6f7a86,{roughness:0.55,metalness:0.15}),dark=M(0x3d4550),glow=new THREE.MeshBasicMaterial({color:new THREE.Color(col).lerp(new THREE.Color(0xffffff),.45),toneMapped:false});
+ const pw=0.2;for(const sx of [-1,1]){const px=sx*(w/2-pw/2);const p=new THREE.Mesh(new RoundedBoxGeometry(pw,h,pw,2,0.04),stone);p.position.set(px,h/2,0);g.add(p);
+  const cap=new THREE.Mesh(new RoundedBoxGeometry(pw*1.2,0.1,pw*1.2,2,0.03),dark);cap.position.set(px,h,0);g.add(cap);
+  const st=new THREE.Mesh(new THREE.BoxGeometry(0.035,h*0.8,0.02),glow);st.position.set(px-sx*pw*0.36,h/2,pw/2+0.005);g.add(st)}
+ const pwid=w-2*pw,ph=h*0.86;const panel=new THREE.Mesh(new THREE.PlaneGeometry(pwid,ph),new THREE.MeshBasicMaterial({map:iconTex(txt,col,sub),transparent:true,depthWrite:false,side:THREE.DoubleSide,toneMapped:false}));panel.position.set(0,h/2,0);g.add(panel);
+ const fr=(ww,hh,x,y)=>{const b=new THREE.Mesh(new THREE.BoxGeometry(ww,hh,0.03),glow);b.position.set(x,y,0.01);g.add(b)};
+ fr(pwid,0.035,0,h/2+ph/2);fr(pwid,0.035,0,h/2-ph/2);
+ const gb=new THREE.Mesh(blobGeo,blobMat);gb.scale.set(w*1.05,1,0.35);gb.position.y=0.005;g.add(gb);
+ g.position.x=(x0+x1)/2;S.add(g);return g}
+const gates=[makeGate(-CFG.ROAD,0,'add','+10','병력 추가'),makeGate(0,CFG.ROAD,'sub','−5','감소')];
+let gateZ=-30;
 
-// ---------- character part system (procedural rounded cartoon, instanced per part)
-const unitParts=[];
-function partSet(defs,max){ // defs: {geo,mat,pos,anim:'legL'|..., pivot}
- return defs.map(d=>{const im=new THREE.InstancedMesh(d.geo,d.mat,max);im.frustumCulled=false;im.count=0;if(d.colors)im.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(max*3),3);S.add(im);return Object.assign({im},d)});
-}
-const _m=new THREE.Matrix4(),_p=new THREE.Matrix4(),_q=new THREE.Quaternion(),_e=new THREE.Euler(),_v=new THREE.Vector3(),_s=new THREE.Vector3(1,1,1),_o=new THREE.Matrix4();
-function placeParts(set,i,root,ph,extra){
- for(const d of set){
-  let rx=0,rz=0;const sw=Math.sin(ph);
-  if(d.anim==='legL')rx=sw*0.9;else if(d.anim==='legR')rx=-sw*0.9;
-  else if(d.anim==='armL')rx=(extra&&extra.armUp!=null)?extra.armUp:-sw*0.6;else if(d.anim==='armR')rx=(extra&&extra.armUp!=null)?extra.armUp:sw*0.6;
-  else if(d.anim==='body'){rx=0}
-  // pivot rotate around d.pivot then offset
-  _e.set(rx,0,rz);_q.setFromEuler(_e);_v.fromArray(d.pivot||[0,0,0]);
-  _p.compose(_v,_q,_s); // pivot frame
-  _o.makeTranslation(d.pos[0]-(d.pivot?d.pivot[0]:0),d.pos[1]-(d.pivot?d.pivot[1]:0),d.pos[2]-(d.pivot?d.pivot[2]:0));
-  if(d.rot){_m.makeRotationFromEuler(new THREE.Euler(...d.rot));_o.multiply(_m)}
-  if(d.scl){_m.makeScale(...d.scl);_o.multiply(_m)}
-  _m.multiplyMatrices(root,_p).multiply(_o);
-  d.im.setMatrixAt(i,_m);
- }
-}
-// geometries
-const G={
- sph:new THREE.SphereGeometry(1,14,10),
- cap:new THREE.CapsuleGeometry(0.5,1,3,10),
- helm:new THREE.SphereGeometry(1,18,8,0,Math.PI*2,0,Math.PI*0.55),
- brim:new THREE.CylinderGeometry(1,1,0.12,18),
- rbox:new RoundedBoxGeometry(1,1,1,2,0.22),
- gun:new RoundedBoxGeometry(1,1,1,1,0.12),
-};
-const mat={
- blue:M(0x3d8cf0,{roughness:0.42}),navy:M(0x2a4f9a,{roughness:0.5}),helm:M(0x2f7df2,{roughness:0.22,metalness:0.1,envMapIntensity:1.4}),
- skin:M(0xf2b98d,{roughness:0.5}),olive:M(0x8b8f4a,{roughness:0.55}),olive2:M(0x6e7238,{roughness:0.6}),boot:M(0x3a2f28,{roughness:0.6}),gun:M(0x2b2d33,{roughness:0.35,metalness:0.4}),
- zskin:M(0xffffff,{roughness:0.55}),zshirt:M(0xffffff,{roughness:0.7}),zpants:M(0xffffff,{roughness:0.7}),eye:new THREE.MeshBasicMaterial({color:0xffe14a}),
-};
-// soldier: viewed from behind mostly. units in meters, height ~1.5
-const SOLD=partSet([
- {geo:G.cap,mat:mat.navy,pos:[-0.17,0.38,0],pivot:[-0.17,0.68,0],scl:[0.36,0.3,0.36],anim:'legL'},
- {geo:G.cap,mat:mat.navy,pos:[0.17,0.38,0],pivot:[0.17,0.68,0],scl:[0.36,0.3,0.36],anim:'legR'},
- {geo:G.rbox,mat:mat.boot,pos:[-0.17,0.08,-0.05],pivot:[-0.17,0.68,0],scl:[0.24,0.18,0.36],anim:'legL'},
- {geo:G.rbox,mat:mat.boot,pos:[0.17,0.08,-0.05],pivot:[0.17,0.68,0],scl:[0.24,0.18,0.36],anim:'legR'},
- {geo:G.rbox,mat:mat.blue,pos:[0,0.95,0],scl:[0.66,0.6,0.42]},
- {geo:G.rbox,mat:mat.olive,pos:[0,0.93,0.02],scl:[0.7,0.42,0.46]}, // vest
- {geo:G.rbox,mat:mat.olive,pos:[0,1.0,0.32],scl:[0.56,0.62,0.3]}, // backpack
- {geo:G.rbox,mat:mat.olive2,pos:[0,0.78,0.45],scl:[0.44,0.2,0.16]}, // bedroll pouch
- {geo:G.cap,mat:mat.blue,pos:[-0.38,0.98,-0.16],pivot:[-0.38,1.12,0],rot:[1.2,0,0.2],scl:[0.2,0.32,0.2]},
- {geo:G.cap,mat:mat.blue,pos:[0.38,0.98,-0.16],pivot:[0.38,1.12,0],rot:[1.2,0,-0.2],scl:[0.2,0.32,0.2]},
- {geo:G.gun,mat:mat.gun,pos:[0.12,1.02,-0.52],scl:[0.12,0.16,0.75]},
- {geo:G.sph,mat:mat.skin,pos:[0,1.5,-0.02],scl:[0.3,0.3,0.3]},
- {geo:G.helm,mat:mat.helm,pos:[0,1.54,0],scl:[0.37,0.36,0.39]},
- {geo:G.brim,mat:mat.helm,pos:[0,1.55,0],scl:[0.4,1,0.42]},
-],120);
-const ZN=10;
-const ZOMB=partSet([
- {geo:G.cap,mat:mat.zpants,colors:1,pos:[-0.17,0.38,0],pivot:[-0.17,0.68,0],scl:[0.34,0.3,0.34],anim:'legL'},
- {geo:G.cap,mat:mat.zpants,colors:1,pos:[0.17,0.38,0],pivot:[0.17,0.68,0],scl:[0.34,0.3,0.34],anim:'legR'},
- {geo:G.rbox,mat:mat.zshirt,colors:1,pos:[0,0.98,0],scl:[0.7,0.66,0.44]},
- {geo:G.cap,mat:mat.zskin,colors:1,pos:[-0.42,1.05,-0.3],pivot:[-0.42,1.2,0],rot:[1.45,0,0],scl:[0.2,0.4,0.2],anim:'armL'},
- {geo:G.cap,mat:mat.zskin,colors:1,pos:[0.42,1.05,-0.3],pivot:[0.42,1.2,0],rot:[1.45,0,0],scl:[0.2,0.4,0.2],anim:'armR'},
- {geo:G.sph,mat:mat.zskin,colors:1,pos:[0,1.56,-0.05],scl:[0.36,0.34,0.34]},
- {geo:G.sph,mat:mat.eye,pos:[-0.12,1.6,-0.36],scl:[0.07,0.07,0.04]},
- {geo:G.sph,mat:mat.eye,pos:[0.12,1.6,-0.36],scl:[0.07,0.07,0.04]},
- {geo:G.rbox,mat:mat.boot,pos:[0,1.42,-0.32],scl:[0.2,0.06,0.04]}, // mouth
-],ZN);
-// shadows
-const blobs=new THREE.InstancedMesh(blobGeo,blobMat,160);blobs.frustumCulled=false;S.add(blobs);let blobN=0;
-function blob(x,z,s){_m.compose(_v.set(x,0.03,z),_q.identity(),_s.set(s,1,s));blobs.setMatrixAt(blobN++,_m);_s.set(1,1,1)}
+// ===== instanced part system =====
+function partSet(defs,max){return defs.map(d=>{const im=new THREE.InstancedMesh(d.geo,d.mat,max);im.frustumCulled=false;im.count=0;if(d.colors)im.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(max*3),3);S.add(im);return Object.assign({im},d)})}
+const _m=new THREE.Matrix4(),_p=new THREE.Matrix4(),_q=new THREE.Quaternion(),_e=new THREE.Euler(),_v=new THREE.Vector3(),_s=new THREE.Vector3(1,1,1),_o=new THREE.Matrix4(),_r=new THREE.Matrix4();
+for(const k in G){} 
+function placeParts(set,i,root,ph,extra){for(const d of set){let rx=0;const sw=Math.sin(ph);
+  if(d.anim==='legL')rx=sw*0.9;else if(d.anim==='legR')rx=-sw*0.9;else if(d.anim==='armL')rx=extra?extra.armUp:0;else if(d.anim==='armR')rx=extra?-extra.armUp:0;
+  _e.set(rx,0,0);_q.setFromEuler(_e);const pv=d.pivot||[0,0,0];_v.fromArray(pv);_p.compose(_v,_q,_s);
+  _o.makeTranslation(d.pos[0]-pv[0],d.pos[1]-pv[1],d.pos[2]-pv[2]);if(d.rotM)_o.multiply(d.rotM);if(d.sclM)_o.multiply(d.sclM);
+  _m.multiplyMatrices(root,_p).multiply(_o);d.im.setMatrixAt(i,_m)}}
+const prep=defs=>defs.map(d=>Object.assign(d,{rotM:d.rot?new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...d.rot)):null,sclM:d.scl?new THREE.Matrix4().makeScale(...d.scl):null}));
+// soldier model: height 1.9 model units, faces -z (away from camera)
+// ===== real rigged models (Quaternius, CC0 via Poly Pizza) =====
+const ZN=+(Q.get('z')||36);
+const MODELS={};let modelsOK=false,modelErr=null;
+const glb=u=>new Promise((res,rej)=>loader.load(u,res,undefined,rej));
+// merge all skinned primitives of one skeleton into ONE skinned mesh with vertex colours (1 draw call per unit)
+function bake(root,recolor,hide){
+ root.updateMatrixWorld(true);{const rm=[];root.traverse(o=>{if(hide&&hide(o.name))rm.push(o)});rm.forEach(o=>o.parent.remove(o))}{const b=new THREE.Box3().setFromObject(root);root.userData.h=b.max.y-b.min.y}const groups=new Map();const rigid=[];
+ {const rm=[];root.traverse(o=>{if(hide&&hide(o.name))rm.push(o)});rm.forEach(o=>o.parent.remove(o))}
+ root.traverse(o=>{if(!o.isMesh||!o.visible)return;let p=o;let vis=true;while(p){if(!p.visible)vis=false;p=p.parent}if(!vis)return;
+  const col=recolor(o.material.name,o.material.color?o.material.color.clone():new THREE.Color(1,1,1),o.material);
+  if(o.isSkinnedMesh){const k=o.skeleton.uuid+'|'+(o.parent.isBone?o.uuid:o.parent.uuid)+'|'+o.bindMatrix.elements.join(',');if(!groups.has(k))groups.set(k,{mesh:o,list:[]});groups.get(k).list.push([o,col])}else rigid.push([o,col])});
+ const mat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.45,metalness:0});
+ for(const {mesh,list} of groups.values()){
+  const geos=list.map(([o,col])=>{let g=o.geometry.clone();for(const k of Object.keys(g.attributes))if(!['position','normal','skinIndex','skinWeight','uv'].includes(k))g.deleteAttribute(k);
+   if(!g.attributes.uv)g.setAttribute('uv',new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count*2),2));
+   const n=g.attributes.position.count,c=new Float32Array(n*3);const tex=o.material.map;for(let i=0;i<n;i++){c[i*3]=col.r;c[i*3+1]=col.g;c[i*3+2]=col.b}g.setAttribute('color',new THREE.BufferAttribute(c,3));if(g.index)g=g.toNonIndexed();return g});
+  const merged=mergeGeometries(geos,false);const map=list[0][0].material.map||null;
+  const m=map?mat.clone():mat;if(map){m.map=map}
+  const sm=new THREE.SkinnedMesh(merged,m);sm.bind(mesh.skeleton,mesh.bindMatrix);sm.frustumCulled=false;mesh.parent.add(sm);
+  for(const [o] of list)o.parent.remove(o)}
+ for(const [o,col] of rigid){o.material=new THREE.MeshStandardMaterial({color:col,roughness:0.45})}
+ return root}
+const lin=h=>new THREE.Color(h);
+async function loadModels(){
+ const [sol,zom,orc]=await Promise.all(['models/PpLF4rt4ah.glb','models/VlXjG0N8Eg.glb','models/5vO2YJsPEf.glb'].map(glb));
+ // soldier: bright blue uniform + helmet, olive gear, keep only the rifle (AK)
+ const SOLC={Character_Main:lin(0x2f7df2),Pants:lin(0x2a56b0),Grey:lin(0x7d8a3c),Skin:lin(0xf0b088),Black:lin(0x2a2a30),DarkGrey:lin(0x3a3f2a),Grey2:lin(0x2b2d33),Wood:lin(0x6b4a2a)};
+ bake(sol.scene,(n,c)=>SOLC[n]||c.offsetHSL(0,0,.1),nm=>/Revolver|Sniper|Pistol|SMG|Grenade|ShortCannon|Shotgun|Rocket|Shovel|Knife/.test(nm));
+ MODELS.sol={scene:sol.scene,clips:sol.animations,run:'Run_Gun'};
+ // zombie: atlas texture, tinted grey-green
+ bake(zom.scene,(n,c)=>lin(0xc8d2c0));
+ MODELS.zom={scene:zom.scene,clips:zom.animations.filter(a=>a.name.startsWith('CharacterArmature')),run:'Walk'};
+ // boss: Orc re-skinned as pale grey-flesh brute, weapon removed
+ const ORC={Orc_Main:lin(0x7f8c6a),Orc_Secondary:lin(0x5d6650),Orc_Hair:lin(0x3a3a3a),Belt:lin(0x4a3424),Gold:lin(0x8a7a5a),Eye_White:lin(0xffd23a),Orc_Mouth:lin(0x7a1c1c),Tongue:lin(0x5a1414),Eye_Black:lin(0x111111)};
+ bake(orc.scene,(n,c)=>ORC[n]||c,nm=>/Weapon/.test(nm));
+ MODELS.orc={scene:orc.scene,clips:orc.animations,run:'Walk'};
+ for(const k in MODELS){const b=new THREE.Box3().setFromObject(MODELS[k].scene);MODELS[k].h=MODELS[k].scene.userData.h;console.log('H',k,MODELS[k].h,JSON.stringify(b))}
+ modelsOK=true}
+const clip=(M,n)=>M.clips.find(a=>a.name.endsWith('|'+n)||a.name==n);
+function spawnUnit(key,anim,speed=1){const M=MODELS[key];const o=SkeletonUtils.clone(M.scene);o.traverse(c=>{c.frustumCulled=false});const g=new THREE.Group();g.add(o);S.add(g);
+ const mx=new THREE.AnimationMixer(o);const a=mx.clipAction(clip(M,anim||M.run));a.play();a.time=Math.random()*a.getClip().duration;a.timeScale=speed;return {g,o,mx,act:a,M}}
+function playOnce(u,n){const c=clip(u.M,n);if(!c)return;const a=u.mx.clipAction(c);a.reset();a.setLoop(THREE.LoopOnce,1);a.clampWhenFinished=true;u.act.crossFadeTo(a,.1,false);a.play();u.cur=a}
+function backToRun(u){u.mx.stopAllAction();const a=u.mx.clipAction(clip(u.M,u.M.run));a.reset().play();a.time=Math.random();u.act=a}
+const solPool=[];const zUnits=[];let bossU=null;
+const blobs=new THREE.InstancedMesh(blobGeo,blobMat,260);blobs.frustumCulled=false;S.add(blobs);let blobN=0;
+function blob(x,z,s){_m.compose(_v.set(x,0.004,z),_q.identity(),_s.set(s,1,s*0.6));blobs.setMatrixAt(blobN++,_m);_s.set(1,1,1)}
 
-// ---------- boss (brute)
-const boss=new THREE.Group();S.add(boss);
-{const sk=M(0xa9b08c,{roughness:0.5}),blood=M(0xb3261e,{roughness:0.4}),pants=M(0x4a5a7a,{roughness:0.7}),dk=M(0x3a2a22,{roughness:0.6}),ey=new THREE.MeshBasicMaterial({color:0xffd23a});
- const add=(g,m,p,s,r)=>{const o=new THREE.Mesh(g,m);o.position.set(...p);o.scale.set(...s);if(r)o.rotation.set(...r);boss.add(o);return o};
- boss.userData.legL=add(G.cap,pants,[-0.55,0.65,0],[0.8,0.55,0.8]);boss.userData.legR=add(G.cap,pants,[0.55,0.65,0],[0.8,0.55,0.8]);
- add(G.sph,sk,[0,2.1,0],[1.35,1.15,1.0]); // torso
- add(G.sph,sk,[0,2.75,-0.25],[1.15,0.75,0.85]); // chest
- add(G.sph,blood,[-0.45,2.4,-0.8],[0.35,0.25,0.12]);add(G.sph,blood,[0.5,1.9,-0.85],[0.28,0.35,0.1]);add(G.sph,blood,[0.2,2.9,-0.85],[0.22,0.15,0.08]);
- add(G.rbox,pants,[0,1.25,0],[1.9,0.6,1.3]);
- add(G.rbox,dk,[0,1.45,-0.3],[1.95,0.18,1.2]);
- boss.userData.armL=add(G.cap,sk,[-1.55,1.9,-0.2],[0.75,1.3,0.75],[0.2,0,0.25]);boss.userData.armR=add(G.cap,sk,[1.55,1.9,-0.2],[0.75,1.3,0.75],[0.2,0,-0.25]);
- add(G.sph,sk,[-1.75,0.95,-0.45],[0.55,0.5,0.55]);add(G.sph,sk,[1.75,0.95,-0.45],[0.55,0.5,0.55]); // fists
- add(G.sph,sk,[-1.15,2.85,-0.1],[0.75,0.6,0.7]);add(G.sph,sk,[1.15,2.85,-0.1],[0.75,0.6,0.7]); // shoulders
- add(G.sph,sk,[0,3.35,-0.55],[0.55,0.5,0.5]); // small head
- add(G.sph,ey,[-0.2,3.42,-1.0],[0.1,0.08,0.05]);add(G.sph,ey,[0.2,3.42,-1.0],[0.1,0.08,0.05]);
- add(G.rbox,dk,[0,3.15,-0.98],[0.45,0.12,0.06]);
- const bb=new THREE.Mesh(blobGeo,blobMat);bb.scale.set(4,1,3);bb.position.y=0.03;boss.add(bb);
- boss.traverse(o=>{if(o.isMesh&&o.material.color)o.userData.c0=o.material.color.clone()});
- boss.scale.setScalar(1.15);}
-boss.rotation.y=Math.PI; // faces +z (toward player)
-let bossZ=-34,bossHit=0;
+const boss=new THREE.Group();S.add(boss);{const bb=new THREE.Mesh(blobGeo,blobMat);bb.scale.set(1.8,1,1.1);bb.position.y=0.005;boss.add(bb)}
+let bossZ=-16,bossHit=0;
 
-// ---------- bullets & muzzle
-const bulletGeo=new THREE.CapsuleGeometry(0.06,0.7,3,6).rotateX(Math.PI/2);
-const bulletMat=new THREE.MeshBasicMaterial({color:0xffd75a,toneMapped:false});
-const BN=260;const bullets=new THREE.InstancedMesh(bulletGeo,bulletMat,BN);bullets.frustumCulled=false;S.add(bullets);
-const B=[];for(let i=0;i<BN;i++)B.push({a:0,x:0,y:0,z:0});
+// ===== bullets / flashes / sparks (v9 units) =====
+const BN=400;const bullets=new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.018,0.28,3,6).rotateX(Math.PI/2),new THREE.MeshBasicMaterial({color:0xffd75a,toneMapped:false}),BN);bullets.frustumCulled=false;S.add(bullets);
+const B=[];for(let i=0;i<BN;i++)B.push({a:0});
 const flashTex=canvasTex(64,64,(x)=>{const g=x.createRadialGradient(32,32,1,32,32,30);g.addColorStop(0,'rgba(255,255,220,1)');g.addColorStop(.35,'rgba(255,200,60,.9)');g.addColorStop(1,'rgba(255,120,0,0)');x.fillStyle=g;x.fillRect(0,0,64,64)});
-const flashMat=new THREE.MeshBasicMaterial({map:flashTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false});
-const flashes=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1),flashMat,120);flashes.frustumCulled=false;S.add(flashes);
-// hit sparks / goo puffs
-const puffMat=new THREE.MeshBasicMaterial({color:0xffb347,toneMapped:false});
-const PN=80;const puffs=new THREE.InstancedMesh(G.sph,puffMat,PN);puffs.frustumCulled=false;S.add(puffs);const P=[];for(let i=0;i<PN;i++)P.push({t:0});
+const flashes=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:flashTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false}),110);flashes.frustumCulled=false;S.add(flashes);
+const PN=120;const puffs=new THREE.InstancedMesh(G.sph,new THREE.MeshBasicMaterial({color:0xffb347,toneMapped:false}),PN);puffs.frustumCulled=false;S.add(puffs);const P=[];for(let i=0;i<PN;i++)P.push({t:0});
+let pi=0;function puff(x,y,z){const p=P[pi];pi=(pi+1)%PN;p.t=0.3;p.x=x;p.y=y;p.z=z}
 
-// ---------- formation
-function displayCount(n){const T=[[1,1],[3,3],[5,5],[10,10],[30,22],[50,28],[100,36],[1000,60]];if(n<=1)return 1;for(let i=1;i<T.length;i++)if(n<=T[i][0]){const [a,b]=T[i-1],[c,d]=T[i];return Math.round(b+(d-b)*(n-a)/(c-a))}return 60}
-let soldiers=[];
-function setN(n){REAL=n;document.getElementById('num').textContent=n;const d=displayCount(n);
- const cols=d<=3?d:d<=5?3:d<=10?4:d<=22?5:6; const sp=d<=5?1.45:d<=10?1.15:0.95; // ~1.35x body width (0.7)
- soldiers=[];for(let i=0;i<d;i++){const r=Math.floor(i/cols),c=i%cols;const rowN=Math.min(cols,d-r*cols);
-  const stag=(r%2)*0.0;soldiers.push({x:(c-(rowN-1)/2)*sp+stag,z:r*sp*1.05,ph:Math.random()*6.28,fire:Math.random()*0.3})}
- for(const d2 of SOLD)d2.im.count=d;
- document.querySelectorAll('#ui button').forEach(b=>b.classList.toggle('on',+b.dataset.n===n));
- const rows=Math.ceil(d/cols);camTarget=rows;
-}
-let camTarget=1;
-document.querySelectorAll('#ui button').forEach(b=>b.onclick=()=>setN(+b.dataset.n));
+// ===== squad: v9 sqSC + layout() ported 1:1 (v9 z forward = three -z) =====
+const SQ={show:+(Q.get('show')||0),n:+(Q.get('n')||5),x:0,tx:0,squeeze:false,sq:[]};
+const sqSC=()=>{const n=Math.min(SQ.n,100),k=n<=15?1:n<=40?.88:n<=70?.76:.66;return Math.min(1.58,.07*H*CFG.CAMD/(.413*F))*k};
+const sqH=()=>.413*sqSC();
+function layout(N){const L=CFG.LANE,sw=.134*sqSC(),SP=.7*sw,RZ=.32*sqH();
+ let A=(SQ.squeeze?.425:.6)*L-sw/2;const lo=-CFG.ROAD+.05*L+sw/2-SQ.x,hi=CFG.ROAD-.05*L-sw/2-SQ.x,C=[];
+ for(let r=-40;r<=40;r++)for(let c=-25;c<=25;c++){const x=(c+(r&1?.5:0))*SP,z=r*RZ;if(Math.abs(x)>A+1e-6||x<lo||x>hi)continue;C.push([x,z,(x/SP)**2+(z/RZ)**2*.55+Math.abs(c)*1e-4])}
+ C.sort((p,q)=>p[2]-q[2]);const o=C.slice(0,N);if(!o.length)o.push([0,0,0]);const zt=Math.max(...o.map(q=>q[1]));
+ for(const q of o)q[1]-=zt;o.sort((p,q)=>q[1]-p[1]||Math.abs(p[0])-Math.abs(q[0]));return o.map(q=>[q[0],q[1]])}
+function updateSquad(dt){const N=dispN();const tg=layout(N);
+ while(SQ.sq.length<N){const t=tg[SQ.sq.length]||[0,0];SQ.sq.push({ox:t[0],oz:t[1],ph:Math.random()*6.28,fire:Math.random()*.28,fl:0})}
+ SQ.sq.length=N;const k=Math.min(1,dt*12);SQ.sq.forEach((q,i)=>{q.ox+=(tg[i][0]-q.ox)*k;q.oz+=(tg[i][1]-q.oz)*k})}
+const dispN=()=>{const n=Math.min(SQ.n,100);return SQ.show?Math.min(n,SQ.show):n};
+const clampX=x=>Math.max(-CFG.ROAD+.25,Math.min(CFG.ROAD-.25,x));
+function setN(n){SQ.n=n;SQ.sq.length=0;document.getElementById('num').textContent=n;document.querySelectorAll('#ui button').forEach(b=>b.classList.toggle('on',+b.dataset.n===n))}
+document.querySelectorAll('#ui2 button').forEach(b=>{b.classList.toggle('on',+b.dataset.s===SQ.show);b.onclick=e=>{e.stopPropagation();SQ.show=+b.dataset.s;SQ.sq.length=0;document.querySelectorAll('#ui2 button').forEach(c=>c.classList.toggle('on',c===b))}});
+document.querySelectorAll('#ui button').forEach(b=>b.onclick=e=>{e.stopPropagation();setN(+b.dataset.n)});
+// v9 steering: drag (px / (F/CAMD)) and arrow keys ±0.5
+let touch=null;
+canvas.addEventListener('pointerdown',e=>{touch={px:e.clientX,tx:SQ.tx};canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointermove',e=>{if(!touch)return;SQ.tx=clampX(touch.tx+(e.clientX-touch.px)/(F/CFG.CAMD))});
+const endT=()=>{touch=null};canvas.addEventListener('pointerup',endT);canvas.addEventListener('pointercancel',endT);
+addEventListener('keydown',e=>{if(e.key=='ArrowLeft')SQ.tx=clampX(SQ.tx-.5);if(e.key=='ArrowRight')SQ.tx=clampX(SQ.tx+.5)});
+if(Q.has('x'))SQ.x=SQ.tx=clampX(+Q.get('x'));
 
-// ---------- zombies
+// ===== zombie horde =====
 const ZPAL=[[0x8fc46a,0xb8452e,0x3d4f6e],[0x9fb5a0,0x6b5a3e,0x2d2d36],[0x7fae5a,0x3f6fb0,0x4a3b2e],[0xa8c98a,0x8a8a8a,0x2e3f55],[0x86b07a,0xd9c46b,0x55463a],[0x92b884,0xffffff,0x3b4a66]];
-const Z=[];
-for(let i=0;i<ZN;i++)Z.push({});
-function spawnZ(z,far){const p=ZPAL[Math.random()*ZPAL.length|0];z.x=rnd(-3.4,3.4);z.z=far?rnd(-30,-18):rnd(-26,-12);z.hp=9;z.ph=Math.random()*6;z.dead=0;z.hit=0;z.kb=0;
- z.body=Math.random();z.sx=z.body<.3?1.35:z.body<.6?0.9:1.05;z.sy=z.body<.3?0.95:z.body<.6?1.15:1.0;z.spd=rnd(1.2,2.0);
- z.col=p.map(c=>new THREE.Color(c));}
+const Z=[];for(let i=0;i<ZN;i++)Z.push({});
+function spawnZ(z,far){const p=ZPAL[Math.random()*ZPAL.length|0];z.x=rnd(-1.45,1.45);z.z=far?rnd(-26,-18):rnd(-24,-7);z.ph=Math.random()*6;z.dead=0;z.hit=0;z.kb=0;
+ const r=Math.random();z.type=r<.06?'tank':r<.24?'fast':'normal';z.sz=z.type=='tank'?1.5*1.12:z.type=='fast'?.8:1;z.hp=z.type=='tank'?40:10;
+ z.fat=z.type=='tank'?1.25:Math.random()<.3?1.15:0.92;z.spd=(z.type=='fast'?1.6:1)*rnd(.9,1.2);z.col=p.map(c=>new THREE.Color(c));if(z.type=='tank')z.col=[new THREE.Color(0x5f8f6a),new THREE.Color(0x4f6a8a),new THREE.Color(0x2e3a4a)]}
 Z.forEach(z=>spawnZ(z,false));
 
-// ---------- decorations (async GLB load)
-let ready=false;
-(async()=>{
- try{
+// ===== decorations =====
+(async()=>{try{
  const [tOak,tDef,tPine,tPineC,tFat,rock,box,barrel,fence,barrier,tower]=await Promise.all(['assets/tree_oak.glb','assets/tree_default.glb','assets/tree_pineRoundA.glb','assets/tree_pineRoundC.glb','assets/tree_fat.glb','assets/rock_largeA.glb','assets/surv/box-large.glb','assets/surv/barrel.glb','assets/surv/fence-fortified.glb','assets/city/construction-barrier.glb','assets/td/wood-structure-high.glb'].map(loadGLB));
- const brighten=m=>{if(m.color){const h={};m.color.getHSL(h);if(h.h>0.2&&h.h<0.55){m.color.setHSL(0.29+Math.random()*0.04,0.62,Math.min(0.42,h.l*0.75))}else m.color.setHSL(h.h,Math.min(1,h.s*1.3),h.l*0.95)}m.roughness=0.55};
- const trees=[tOak,tDef,tPine,tPineC,tFat];
- trees.forEach((t,k)=>{const its=[];for(let i=0;i<8;i++){const sx=(i+k)%2?1:-1;its.push({x:sx*rnd(ROADW/2+2.6,ROADW/2+9),z:-rnd(0,LOOP)+ZNEAR,s:rnd(2.6,3.6),ry:rnd(0,6)})}decor(instFrom(t,its.length,brighten),its)});
- // fences both sides, continuous
+ const brighten=m=>{if(m.color){const h={};m.color.getHSL(h);if(h.h>0.2&&h.h<0.55)m.color.setHSL(0.29+Math.random()*0.04,0.62,Math.min(0.42,h.l*0.75));else m.color.setHSL(h.h,Math.min(1,h.s*1.3),h.l*0.95)}m.roughness=0.55};
+ [tOak,tDef,tPine,tPineC,tFat].forEach((t,k)=>{const its=[];for(let i=0;i<8;i++){const sx=(i+k)%2?1:-1;its.push({x:sx*rnd(ROADW/2+2.6,ROADW/2+9),z:ZNEAR-rnd(0,LOOP),s:rnd(2.6,3.6),ry:rnd(0,6)})}decor(instFrom(t,its.length,brighten),its)});
  {const its=[];const n=Math.ceil(LOOP/2.0);for(const sx of [-1,1])for(let i=0;i<n;i++)its.push({x:sx*(ROADW/2+0.9),z:ZNEAR-i*2.0,s:2.0,ry:Math.PI/2});decor(instFrom(fence,its.length,brighten),its)}
- // red-white barriers at road edge
  {const its=[];for(const sx of [-1,1])for(let i=0;i<10;i++)its.push({x:sx*(ROADW/2+0.1),z:ZNEAR-i*9-4*(sx+1),s:1.6,ry:Math.PI/2});decor(instFrom(barrier,its.length,brighten),its)}
- // crates on shoulders
- {const its=[];for(let i=0;i<8;i++){const sx=i%2?1:-1;its.push({x:sx*(ROADW/2-0.9),z:ZNEAR-i*11-3,s:2.2,ry:rnd(-.2,.2)})}decor(instFrom(box,its.length,brighten),its)}
  {const its=[];for(let i=0;i<5;i++){const sx=i%2?-1:1;its.push({x:sx*(ROADW/2+2),z:ZNEAR-i*17-8,s:1.8})}decor(instFrom(barrel,its.length,brighten),its)}
  {const its=[];for(let i=0;i<14;i++){const sx=i%2?-1:1;its.push({x:sx*rnd(ROADW/2+3,ROADW/2+9),z:ZNEAR-rnd(0,LOOP),s:rnd(1.5,3),ry:rnd(0,6)})}decor(instFrom(rock,its.length,brighten),its)}
- {const its=[{x:-(ROADW/2+6),z:-40,s:3.2}];decor(instFrom(tower,1,brighten),its)}
- }catch(e){console.error('asset load',e)}
- ready=true;window.__ready=true;
-})();
+ {decor(instFrom(tower,1,brighten),[{x:-(ROADW/2+6),z:-40,s:3.2}])}
+ // v9 crates sit on lane centres (0.6 wide) — Kenney crate is ~1 env unit at s=1
+ {const its=[];for(let i=0;i<4;i++){its.push({x:[-1,1,0,-1][i]*CFG.LANE/K,z:ZNEAR-i*22-12,s:0.6/K})}decor(instFrom(box,its.length,brighten),its)}
+}catch(e){console.error('asset load',e)}
+ try{await loadModels()}catch(e){modelErr=String(e);console.error('models',e)}window.__models=modelsOK;window.__ready=true})();
 
-// ---------- loop
-setN(REAL);
-const clock=new THREE.Clock();let t=0;let fcount=0,facc=0;window.__fps=0;
+// ===== loop =====
+fit();setN(SQ.n);
+const clock=new THREE.Clock();let t=0,fcount=0,t0=performance.now();window.__fps=0;
 const fpsEl=document.getElementById('fps');if(Q.has('fps'))fpsEl.style.display='block';
-function resize(){const w=canvas.clientWidth,h=canvas.clientHeight;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
-addEventListener('resize',resize);resize();
 const root=new THREE.Matrix4();let bi=0;
 function fireBullet(x,y,z){const b=B[bi];bi=(bi+1)%BN;b.a=1;b.x=x;b.y=y;b.z=z}
-let gateZ=-26;
+let cyc=0;
 function frame(){
- let dt=Math.min(clock.getDelta(),0.05);if(Q.has('frozen'))dt=0.016*(+Q.get('frozen')||1);t+=dt;
- fcount++;const nowp=performance.now();if(!window.__t0)window.__t0=nowp;facc=(nowp-window.__t0)/1000;
- const dz=SPEED*dt;
- roadTex.offset.y+=dz/20; grassTex.offset.y+=dz/4;
- for(const s of scrollers)s.upd(dz);
- gateZ+=dz;if(gateZ>ZNEAR)gateZ=-60;gate.position.z=gateZ;gate.userData.halo.material.opacity=0.45+0.15*Math.sin(t*4);
- // camera framing by formation depth
- const rows=camTarget;const back=rows*1.0;
- const D=(rows-1)*1.0;cam.position.set(0,5.8+D*1.1,10.5+D*2.0);cam.lookAt(0,0.3,-12+D*0.6);
- // soldiers
- blobN=0;let fi=0;
- for(let i=0;i<soldiers.length;i++){const s=soldiers[i];s.ph+=dt*11;const bob=Math.abs(Math.sin(s.ph))*0.08;
-  root.compose(_v.set(s.x,bob,s.z),_q.identity(),_s.set(1.05,1.05,1.05));_s.set(1,1,1);
-  placeParts(SOLD,i,root,s.ph);blob(s.x,s.z,1.0);
-  s.fire-=dt;if(s.fire<=0){s.fire=0.16+Math.random()*0.06;fireBullet(s.x+0.13,1.07,s.z-1.0);s.fl=0.06}
-  if(s.fl>0&&fi<120){s.fl-=dt;const sc=0.8+Math.random()*0.4;_m.compose(_v.set(s.x+0.13,1.08,s.z-1.0),cam.quaternion,_s.set(sc,sc,sc));flashes.setMatrixAt(fi++,_m);_s.set(1,1,1)}}
+ const dt=Math.min(clock.getDelta(),0.05);t+=dt;fcount++;
+ const dzv=CFG.SPEED*dt;   // v9 units the world moves toward the squad
+ roadTex.offset.y+=dzv/K/20;curbTex.offset.y+=dzv/K/4;grassTex.offset.y+=dzv/K/4;for(const s of scrollers)s.upd(dzv/K);
+ // phases: gate run, then boss walks in (boss never behind a gate panel)
+ cyc+=dt;const ph=PHASE||(cyc%18<9?'gate':'boss');
+ if(ph=='gate'){if(PHASE=='gate'&&Q.has('gz'))gateZ=+Q.get('gz');else{gateZ+=dzv;if(gateZ>1.5)gateZ=-30}}else gateZ=99;
+ for(const g of gates){g.visible=gateZ<2;g.position.z=gateZ}
+ // v9: squeeze formation when a gate is within .8*SPEED ahead
+ SQ.squeeze=gateZ<0&&-gateZ<.8*CFG.SPEED;
+ SQ.x+=(SQ.tx-SQ.x)*Math.min(1,dt/.12);
+ updateSquad(dt);
+ const SC=sqSC();blobN=0;let fi=0;
+ if(modelsOK){
+ const sS=1.5*0.432*SC/MODELS.sol.h;
+ while(solPool.length<SQ.sq.length){const u=spawnUnit('sol','Run_Gun',1.1);u.g.rotation.y=Math.PI;solPool.push(u)}
+ for(let i=0;i<solPool.length;i++){const u=solPool[i];const on=i<SQ.sq.length;u.g.visible=on;if(!on)continue;const q=SQ.sq[i];const x=SQ.x+q.ox,z=-q.oz;
+  u.g.position.set(x,0,z);u.g.scale.setScalar(sS);u.mx.update(dt);blob(x,z,0.26*SC);
+  q.fire-=dt;const gx=x+.062*SC,gy=.21*SC,gz=z-.14*SC;if(q.fire<=0){q.fire=.16+Math.random()*.04;fireBullet(gx,gy,gz);q.fl=.05}
+  if(q.fl>0&&fi<110){q.fl-=dt;const sc=(.12+Math.random()*.06)*SC;_m.compose(_v.set(gx,gy,gz),cam.quaternion,_s.set(sc,sc,sc));flashes.setMatrixAt(fi++,_m);_s.set(1,1,1)}}
+ // zombies (v9 heights .78*sz)
+ while(zUnits.length<ZN){const z=Z[zUnits.length];const u=spawnUnit('zom','Walk',z.spd*1.2);zUnits.push(u)}
+ for(let i=0;i<ZN;i++){const z=Z[i],u=zUnits[i];
+  if(z.dead>0){z.dead+=dt;if(z.dead>1.4){spawnZ(z,true);backToRun(u)}}
+  else{z.z+=z.spd*1.1*dt;if(z.kb>0){z.z-=z.kb*dt*3;z.kb=Math.max(0,z.kb-dt*4)}if(z.z>-0.6){spawnZ(z,true)}}
+  if(z.justDied){z.justDied=0;playOnce(u,'Death')}
+  const hz=.78*z.sz,s=hz/MODELS.zom.h,sink=z.dead>1?(z.dead-1)*.5:0;
+  u.g.position.set(z.x,-sink,z.z);u.g.scale.set(s*z.fat,s,s*z.fat);u.mx.update(dt);if(z.dead<=0)blob(z.x,z.z,hz*.6)}
+ // boss: v9 height 2.5, tank silhouette (wider, stockier)
+ if(!bossU){bossU=spawnUnit('orc','Walk',.8)}
+ boss.visible=bossU.g.visible=ph=='boss';if(ph=='boss'){if(PHASE=='boss')bossZ=+(Q.get('bz')||-12);else{bossZ+=dt*.5;if(bossZ>-7)bossZ=-16}}else bossZ=-16;
+ {const bs=2.5/MODELS.orc.h;bossU.g.position.set(0,0,bossZ);bossU.g.scale.set(bs*1.35,bs,bs*1.25);boss.position.set(0,0,bossZ);if(boss.visible)bossU.mx.update(dt)}
+ }
+ {const v=new THREE.Vector3(SQ.x,.62*SC+.12,0).project(cam);const el=document.getElementById('cnt');el.style.left=((v.x+1)/2*100)+'%';el.style.top=((1-v.y)/2*100)+'%';}
  flashes.count=fi;flashes.instanceMatrix.needsUpdate=true;
- for(const d of SOLD)d.im.instanceMatrix.needsUpdate=true;
- // zombies
- for(let i=0;i<ZN;i++){const z=Z[i];
-  if(z.dead>0){z.dead+=dt;if(z.dead>1.1)spawnZ(z,true)}
-  else{z.z+=(z.spd+SPEED*0.0)*dt;z.ph+=dt*6;if(z.kb>0){z.z-=z.kb*dt*8;z.kb=Math.max(0,z.kb-dt*4)}if(z.z>-1.5)spawnZ(z,true)}
-  z.hit=Math.max(0,z.hit-dt*5);
-  const fall=z.dead>0?Math.min(1,z.dead*3):0;const sink=z.dead>0.6?(z.dead-0.6)*2:0;
-  _e.set(-fall*1.45,Math.PI+Math.sin(z.ph*0.5)*0.15,Math.sin(z.ph)*0.08);_q.setFromEuler(_e);
-  root.compose(_v.set(z.x,Math.abs(Math.sin(z.ph))*0.05-sink,z.z),_q,_s.set(z.sx,z.sy,z.sx));_s.set(1,1,1);
-  placeParts(ZOMB,i,root,z.ph,{armUp:Math.sin(z.ph)*0.2});
-  if(z.dead<=0)blob(z.x,z.z,1.1*z.sx);
-  const h=z.hit;const tint=(c)=>c.clone().lerp(new THREE.Color(0xff6a5a),h*0.6);
-  ZOMB[0].im.setColorAt(i,tint(z.col[2]));ZOMB[1].im.setColorAt(i,tint(z.col[2]));ZOMB[2].im.setColorAt(i,tint(z.col[1]));
-  for(const k of [3,4,5])ZOMB[k].im.setColorAt(i,tint(z.col[0]));}
- for(const d of ZOMB){d.im.count=ZN;d.im.instanceMatrix.needsUpdate=true;if(d.im.instanceColor)d.im.instanceColor.needsUpdate=true}
- // boss
- bossZ+=dt*0.9;if(bossZ>-12)bossZ=-40;const bph=t*3.2;
- boss.position.set(0,Math.abs(Math.sin(bph))*0.1,bossZ);boss.userData.legL.rotation.x=Math.sin(bph)*0.5;boss.userData.legR.rotation.x=-Math.sin(bph)*0.5;
- boss.userData.armL.rotation.x=0.2+Math.sin(bph)*0.35;boss.userData.armR.rotation.x=0.2-Math.sin(bph)*0.35;
- bossHit=Math.max(0,bossHit-dt*5);boss.traverse(o=>{if(o.userData.c0)o.material.color.copy(o.userData.c0).lerp(new THREE.Color(0xff8070),bossHit*0.35)});
- blob(0,0,0);blobN--; // noop keep
- // bullets
- let bn=0;
- for(const b of B){if(!b.a)continue;b.z-=40*dt;
-  if(b.z<-45){b.a=0;continue}
-  for(const z of Z){if(z.dead<=0&&Math.abs(b.x-z.x)<0.45*z.sx&&b.z<z.z+0.3&&b.z>z.z-0.6){b.a=0;z.hp--;z.hit=1;z.kb=0.4;puff(b.x,1.2,z.z+0.3);if(z.hp<=0){z.dead=0.001;for(let k=0;k<4;k++)puff(z.x+rnd(-.3,.3),rnd(.6,1.6),z.z)}break}}
-  if(b.a&&Math.abs(b.x)<2.3&&b.z<bossZ+1.2&&b.z>bossZ-0.8){b.a=0;bossHit=1;puff(b.x,rnd(1.5,3),bossZ+1.2)}
+ // bullets: v=45, straight
+ let bn=0;for(const b of B){if(!b.a)continue;b.z-=45*dt;if(b.z<-30){b.a=0;continue}
+  for(const z of Z){const hw=.15*z.sz+.08;if(z.dead<=0&&Math.abs(b.x-z.x)<hw&&b.z<z.z+.15&&b.z>z.z-.4){b.a=0;z.hp--;z.hit=1;z.kb=.15;puff(b.x,.35*z.sz,z.z+.1);if(z.hp<=0){z.dead=.001;z.justDied=1;for(let k=0;k<3;k++)puff(z.x+rnd(-.1,.1),rnd(.2,.6),z.z)}break}}
+  if(b.a&&boss.visible&&Math.abs(b.x)<.75&&b.z<bossZ+.4&&b.z>bossZ-.3){b.a=0;bossHit=1;puff(b.x,rnd(.5,1.8),bossZ+.4)}
   if(!b.a)continue;_m.compose(_v.set(b.x,b.y,b.z),_q.identity(),_s);bullets.setMatrixAt(bn++,_m)}
  bullets.count=bn;bullets.instanceMatrix.needsUpdate=true;
- let pn=0;for(const p of P){if(p.t<=0)continue;p.t-=dt;p.y+=dt*1.5;p.z+=dz;const sc=0.18*(p.t/0.35);_m.compose(_v.set(p.x,p.y,p.z),_q.identity(),_s.set(sc,sc,sc));_s.set(1,1,1);puffs.setMatrixAt(pn++,_m)}
- puffs.count=pn;puffs.instanceMatrix.needsUpdate=true;
- blobs.count=blobN;blobs.instanceMatrix.needsUpdate=true;
+ let pn=0;for(const p of P){if(p.t<=0)continue;p.t-=dt;p.y+=dt*.5;const sc=.07*(p.t/.3);_m.compose(_v.set(p.x,p.y,p.z),_q.identity(),_s.set(sc,sc,sc));_s.set(1,1,1);puffs.setMatrixAt(pn++,_m)}
+ puffs.count=pn;puffs.instanceMatrix.needsUpdate=true;blobs.count=blobN;blobs.instanceMatrix.needsUpdate=true;
  R.render(S,cam);
- if(facc>=1){window.__fps=fcount/facc;fpsEl.textContent=window.__fps.toFixed(0)+' fps · '+R.info.render.calls+' draws';window.__calls=R.info.render.calls;window.__tris=R.info.render.triangles;fcount=0;facc=0;window.__t0=nowp}
- requestAnimationFrame(frame);
-}
-let pi=0;function puff(x,y,z){const p=P[pi];pi=(pi+1)%PN;p.t=0.35;p.x=x;p.y=y;p.z=z}
+ const now=performance.now();if(now-t0>=1000){window.__fps=fcount*1000/(now-t0);fpsEl.textContent=window.__fps.toFixed(0)+' fps · '+R.info.render.calls+' draws';window.__calls=R.info.render.calls;window.__tris=R.info.render.triangles;fcount=0;t0=now}
+ requestAnimationFrame(frame)}
 requestAnimationFrame(frame);
 </script></body></html>

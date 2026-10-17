@@ -100,3 +100,13 @@ Download date: 2026-10-17 13:32 KST (all from official sites via curl).
 - assets/city/construction-barrier.glb, Textures/colormap.png — Kenney City Kit (Roads)
 - assets/td/wood-structure-high.glb, Textures/colormap.png — Kenney Tower Defense Kit
 - Soldiers, zombies, boss, gate, road/grass textures, sky, hills: made procedurally in code (no third-party assets).
+
+## Rigged character models (added 2026-10-17 ~14:10 KST) — downloaded from Poly Pizza (static.poly.pizza), each page lists license "Public Domain" (= CC0 1.0), creator Quaternius
+| file (models/) | Poly Pizza page | title | license |
+|---|---|---|---|
+| PpLF4rt4ah.glb | https://poly.pizza/m/PpLF4rt4ah | Character Soldier — Quaternius | Public Domain / CC0 |
+| VlXjG0N8Eg.glb | https://poly.pizza/m/VlXjG0N8Eg | Zombie — Quaternius | Public Domain / CC0 |
+| 5vO2YJsPEf.glb | https://poly.pizza/m/5vO2YJsPEf | Orc — Quaternius (used as boss, weapon removed, recoloured) | Public Domain / CC0 |
+No CC-BY models are used (CC-BY items seen and skipped: 22K0aSZkHV "Zombie", jkrEvQZb8J "Animated Zombie", oAArCNHjFB "Soldier" — Quaternius, CC-BY 3.0).
+Modifications: materials recoloured in code (blue uniform/helmet, grey-green zombie tint, grey-flesh boss), unused weapons removed, meshes merged at load time.
+- three/addons SkeletonUtils.js — MIT (three.js r180).
