@@ -7,17 +7,18 @@ html,body{margin:0;height:100%;background:#9fd3f5;overflow:hidden;font-family:sy
 canvas{display:block;width:100%;height:100%}
 #cnt{position:absolute;left:50%;transform:translate(-50%,-100%);top:70%;background:rgba(20,60,140,.82);color:#fff;border:3px solid #7fd0ff;border-radius:22px;padding:4px 16px 4px 10px;font-weight:900;font-size:24px;display:flex;align-items:center;gap:6px;box-shadow:0 3px 0 #0b2d66}
 #cnt svg{width:28px;height:28px}
-#ui{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:6px}
+#ui{position:absolute;top:150px;right:8px;display:flex;flex-direction:column;gap:6px}
 #ui button{font-weight:900;font-size:15px;border:0;border-radius:12px;padding:6px 10px;background:#fff;color:#1a4da8;box-shadow:0 3px 0 #1a4da8}
 #ui button.on{background:#ffd23f}
 #ui2{position:absolute;top:8px;left:8px;display:flex;gap:4px;align-items:center;font:800 12px system-ui;color:#fff;text-shadow:0 1px 2px #000}#ui2 button{font-weight:900;font-size:13px;border:0;border-radius:10px;padding:4px 7px;background:#fff;color:#1a4da8}#ui2 button.on{background:#ffd23f}
+#bb{position:absolute;left:0;right:0;top:0;display:none;pointer-events:none}#bbt{position:absolute;left:0;right:0;text-align:center;color:#fff;font-weight:700;-webkit-text-stroke:0;text-shadow:0 0 3px #000,0 0 3px #000,0 1px 2px #000}#bbo{position:absolute;background:#14203a;border-radius:8px}#bbi{position:absolute;border-radius:6px;background:linear-gradient(#ff9a6a,#d01e1e)}#bbs{position:absolute}
 #fps{position:absolute;left:6px;bottom:6px;color:#fff;font:12px monospace;text-shadow:0 1px 2px #000;display:none}
 </style>
 <script type="importmap">{"imports":{"three":"./lib/three.module.min.js","three/addons/":"./lib/addons/"}}</script>
 </head><body><div id="wrap"><canvas id="c"></canvas>
 <div id="cnt"><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="5" fill="#3b8cff"/><path d="M6 9a6 6 0 0 1 12 0z" fill="#2563d6"/><rect x="6" y="14" width="12" height="9" rx="4" fill="#3b8cff"/></svg><span id="num">5</span></div>
 <div id="ui"><button data-n="5">5</button><button data-n="10">10</button><button data-n="30">30</button><button data-n="100">100</button></div>
-<div id="ui2"><span>보이는 병사</span><button data-s="0">v9</button><button data-s="20">20</button><button data-s="30">30</button><button data-s="40">40</button><button id="dlb">거리선</button></div><div id="fps"></div></div>
+<div id="ui2"><span>보이는 병사</span><button data-s="0">v9</button><button data-s="20">20</button><button data-s="30">30</button><button data-s="40">40</button><button id="dlb">거리선</button></div><div id="bb"><div id="bbt">보스 100%</div><div id="bbo"></div><div id="bbi"></div><svg id="bbs" viewBox="0 0 32 32"><path d="M16 3C9 3 4 8 4 14c0 4 2 6 4 7v4h3v-3h2v3h2v-3h2v3h2v-3h2v3h3v-4c2-1 4-3 4-7 0-6-5-11-12-11z" fill="#f4f4f4" stroke="#14203a" stroke-width="2"/><circle cx="11" cy="14" r="3.2" fill="#14203a"/><circle cx="21" cy="14" r="3.2" fill="#14203a"/><path d="M16 17l-2 3h4z" fill="#14203a"/></svg></div><div id="fps"></div></div>
 <script type="module">
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/GLTFLoader.js';
@@ -62,6 +63,12 @@ function fit(){W=canvas.clientWidth;H=canvas.clientHeight;R.setSize(W,H,false);c
  const p=(lo+hi)/2,c=solve(p);cam.position.set(0,c.h,c.D);cam.rotation.set(-p,0,0);cam.updateProjectionMatrix();cam.updateMatrixWorld();
  window.__cam={pitchDeg:p*180/Math.PI,downToFrontDeg:(p+a0)*180/Math.PI,h:c.h,D:c.D,fov:FOV}}
 addEventListener('resize',fit);
+// v9 HUD boss bar geometry (v9 draw(): m=max(10,W*.03), fs, text at py+fs*2.2, bar 12px at +fs*.6, skull at m-6)
+function layoutBB(){const m=Math.max(10,W*.03),fs=Math.round(Math.max(14,Math.min(W*.045,20))),py=m+fs*2.6,y=py+fs*2.2,by=y+fs*.6,bw=W-2*m,bh=12;
+ const t=document.getElementById('bbt');t.style.top=(y-fs*.5)+'px';t.style.fontSize=Math.round(fs*.85)+'px';
+ Object.assign(document.getElementById('bbo').style,{left:(m-2)+'px',top:(by-2)+'px',width:(bw+4)+'px',height:(bh+4)+'px'});
+ Object.assign(document.getElementById('bbi').style,{left:m+'px',top:by+'px',height:bh+'px'});layoutBB.bw=bw;
+ Object.assign(document.getElementById('bbs').style,{left:(m-6)+'px',top:(by-10)+'px',width:(bh+20)+'px',height:(bh+20)+'px'})}
 
 // ===== sky (camera-relative) =====
 {const g=new THREE.SphereGeometry(150,24,12);const m=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,
@@ -212,13 +219,21 @@ async function loadModels(){
   LeftArm:[1.3,1.12,1.3],RightArm:[1.3,1.12,1.3],LeftForeArm:[1.06,1.02,1.06],RightForeArm:[1.06,1.02,1.06],LeftHand:[1.12,1.12,1.12],RightHand:[1.12,1.12,1.12],
   LeftUpLeg:[1.25,.9,1.25],RightUpLeg:[1.25,.9,1.25],LeftLeg:[1.08,.95,1.08],RightLeg:[1.08,.95,1.08]},{lean:.38,headTilt:.08,headSide:.0,armSpread:.75,armDrop:1.45});
  for(const k in MODELS){if(!MODELS[k].h)MODELS[k].h=MODELS[k].scene.userData.h;console.log('H',k,MODELS[k].h)}
+ // foot speed (model units/s at timeScale 1) of a clip (optionally blended with idle), measured on the planted foot -> anim speed is set so feet don't slide on the road
+ function footV(M,run,idle,w,toe){const o=SkeletonUtils.clone(M.scene);const mx=new THREE.AnimationMixer(o);const c=clip(M,run);const a=mx.clipAction(c);a.play();a.setEffectiveWeight(w);
+  if(idle){const b=mx.clipAction(clip(M,idle));b.play();b.setEffectiveWeight(1-w)}const B_=bonesOf(o);const tb=B_[toe];const v=new THREE.Vector3();let prev=null,sp=[];
+  for(let t=0;t<=c.duration*2;t+=1/120){mx.setTime(t);o.updateMatrixWorld(true);tb.getWorldPosition(v);if(prev)sp.push([(v.z-prev.z)*120,v.y]);prev=v.clone()}
+  const minY=Math.min(...sp.map(q=>q[1])),rngY=Math.max(...sp.map(q=>q[1]))-minY;const st=sp.filter(q=>q[1]<minY+rngY*.12).map(q=>Math.abs(q[0])).sort((a,b)=>a-b);return st[st.length>>1]}
+ MODELS.zom.WB=.55;MODELS.zom.footV=footV(MODELS.zom,'run','idle',MODELS.zom.WB,'LeftToes');
+ {const nm=[];MODELS.sol.scene.traverse(o=>{if(o.isBone&&/foot|toe/i.test(o.name))nm.push(o.name)});MODELS.sol.toe=nm.find(n=>/L|left/i.test(n))||nm[0];MODELS.sol.footV=MODELS.sol.toe?footV(MODELS.sol,'Run_Gun',null,1,MODELS.sol.toe):0}
+ window.__foot={zom:MODELS.zom.footV,zomH:MODELS.zom.h,sol:MODELS.sol.footV,solToe:MODELS.sol.toe,solH:MODELS.sol.h};
  modelsOK=true}
 const clip=(M,n)=>M.clips.find(a=>a.name.endsWith('|'+n)||a.name==n);
 function spawnUnit(key,anim,speed=1){const M=MODELS[key];const o=SkeletonUtils.clone(M.scene);o.traverse(c=>{c.frustumCulled=false;if(c.isMesh&&M.mats)c.material=M.mats[Math.random()*M.mats.length|0]});const g=new THREE.Group();g.add(o);S.add(g);
  const mx=new THREE.AnimationMixer(o);const a=mx.clipAction(clip(M,anim||M.run));a.play();a.time=Math.random()*a.getClip().duration;a.timeScale=speed;return {g,o,mx,act:a,M,B:M.rig?bonesOf(o):null}}
 function playOnce(u,n){const c=clip(u.M,n);if(!c)return;const a=u.mx.clipAction(c);a.reset();a.setLoop(THREE.LoopOnce,1);a.clampWhenFinished=true;u.act.crossFadeTo(a,.1,false);a.play();u.cur=a}
 function backToRun(u){u.mx.stopAllAction();const a=u.mx.clipAction(clip(u.M,u.M.run));a.reset().play();a.time=Math.random();u.act=a}
-const solPool=[];const zUnits=[];let bossU=null;window.__dbg=()=>{const u=zUnits[0];const B=u.B;const v=new THREE.Vector3(),w=new THREE.Vector3();u.o.updateMatrixWorld(true);B.LeftArm.getWorldPosition(v);B.LeftForeArm.getWorldPosition(w);return {dir:w.sub(v).normalize().toArray(),q:B.LeftArm.quaternion.toArray(),tgt:u.M.rig.armL.toArray(),hips:B.Hips.quaternion.toArray(),root:u.o.children.map(c=>c.name+":"+c.type),rootRot:u.o.rotation.toArray()}};
+const solPool=[];const zUnits=[];let bossU=null;window.__ft=(k,i)=>{const u=k=='boss'?bossU:zUnits[i];if(!u)return null;u.o.updateMatrixWorld(true);const r=[];for(const n of ['LeftToes','RightToes']){const v=new THREE.Vector3();u.B[n].getWorldPosition(v);r.push([v.x,v.y,v.z])}return {feet:r,z:k=='boss'?bossZ:Z[i].z,walk:k=='boss'?0:(-Z[i].z<26&&!Z[i].dead)?1:0,dead:k=='boss'?BS.dead:Z[i].dead,ph}};window.__dbg=()=>{const u=zUnits[0];const B=u.B;const v=new THREE.Vector3(),w=new THREE.Vector3();u.o.updateMatrixWorld(true);B.LeftArm.getWorldPosition(v);B.LeftForeArm.getWorldPosition(w);return {dir:w.sub(v).normalize().toArray(),q:B.LeftArm.quaternion.toArray(),tgt:u.M.rig.armL.toArray(),hips:B.Hips.quaternion.toArray(),root:u.o.children.map(c=>c.name+":"+c.type),rootRot:u.o.rotation.toArray()}};
 const blobs=new THREE.InstancedMesh(blobGeo,blobMat,260);blobs.frustumCulled=false;S.add(blobs);let blobN=0;
 function blob(x,z,s){_m.compose(_v.set(x,0.004,z),_q.identity(),_s.set(s,1,s*0.6));blobs.setMatrixAt(blobN++,_m);_s.set(1,1,1)}
 
@@ -263,8 +278,11 @@ if(Q.has('x'))SQ.x=SQ.tx=clampX(+Q.get('x'));
 const ZPAL=[[0x8fc46a,0xb8452e,0x3d4f6e],[0x9fb5a0,0x6b5a3e,0x2d2d36],[0x7fae5a,0x3f6fb0,0x4a3b2e],[0xa8c98a,0x8a8a8a,0x2e3f55],[0x86b07a,0xd9c46b,0x55463a],[0x92b884,0xffffff,0x3b4a66]];
 const Z=[];for(let i=0;i<ZN;i++)Z.push({});
 const VIEW=60,ZSPD=.7;   // v9: world drawn to R.z+60, zombies walk at ZSPD toward a squad running at SPEED
-function spawnZ(z,far){const p=ZPAL[Math.random()*ZPAL.length|0];z.x=rnd(-1.45,1.45);z.z=far?-VIEW-rnd(0,10):rnd(-VIEW,-8);z.ph=Math.random()*6;z.dead=0;z.hit=0;z.kb=0;
- const r=Math.random();z.type=r<.06?'tank':r<.24?'fast':'normal';z.sz=z.type=='tank'?1.5*1.12:z.type=='fast'?.8:1;z.hp=z.type=='tank'?40:10;
+const ENEMY={normal:{spd:1,sz:1},fast:{spd:1.6,sz:.8},tank:{spd:.75,sz:1.5}},WALK=26,LANES=[-CFG.LANE,0,CFG.LANE];   // v9 ENEMY / CFG.WALK / lanes()
+const laneLast=[-VIEW,-VIEW,-VIEW];
+function spawnZ(z,far){const p=ZPAL[Math.random()*ZPAL.length|0];z.li=Math.random()*3|0;z.x=LANES[z.li];
+ if(far){z.z=Math.min(-VIEW-rnd(0,6),laneLast[z.li]-1.1);}else z.z=rnd(-VIEW,-8);laneLast[z.li]=Math.min(laneLast[z.li],z.z);z.ph=Math.random()*6;z.dead=0;z.hit=0;z.kb=0;z.off=0;
+ const r=Math.random();z.type=r<.06?'tank':r<.24?'fast':'normal';z.sz=z.type=='tank'?1.5*1.12:z.type=='fast'?.8:1;z.hp=z.max=z.type=='tank'?40:10;
  z.fat=z.type=='tank'?1.25:Math.random()<.3?1.15:0.92;z.spd=(z.type=='fast'?1.6:1)*rnd(.9,1.2);z.col=p.map(c=>new THREE.Color(c));if(z.type=='tank')z.col=[new THREE.Color(0x5f8f6a),new THREE.Color(0x4f6a8a),new THREE.Color(0x2e3a4a)]}
 Z.forEach(z=>spawnZ(z,false));
 
@@ -284,18 +302,30 @@ Z.forEach(z=>spawnZ(z,false));
  try{await loadModels()}catch(e){modelErr=String(e);console.error('models',e)}window.__models=modelsOK;window.__ready=true})();
 
 // ===== loop =====
-fit();setN(SQ.n);
+fit();layoutBB();addEventListener('resize',layoutBB);setN(SQ.n);
 const clock=new THREE.Clock();let t=0,fcount=0,t0=performance.now();window.__fps=0;
 const fpsEl=document.getElementById('fps');if(Q.has('fps'))fpsEl.style.display='block';
 const root=new THREE.Matrix4();let bi=0;
 function fireBullet(x,y,z){const b=B[bi];bi=(bi+1)%BN;b.a=1;b.x=x;b.y=y;b.z=z}
-let cyc=0;
-function frame(){
- const dt=Math.min(clock.getDelta(),0.05);t+=dt;fcount++;
- const dzv=CFG.SPEED*dt;   // v9 units the world moves toward the squad
+let cyc=0,ph=PHASE||'gate';
+// v9 boss (startBoss/bossStep): appears at R.z+7, stands, lane slam: warn -> slam .35s; <50% HP two lanes (one safe). S5 cfg warn 1.2 / int 5 / first 4
+const BS={hp:1,max:1,next:4,att:null,slam:null,dead:0,cfg:{warn:1.2,int:5,first:4}};
+function startBoss(){BS.max=BS.hp=Math.max(600,SQ.n*55);BS.next=BS.cfg.first;BS.att=null;BS.slam=null;BS.dead=0;BS.ft=0;for(const z of Z){z.off=1}}   // v9: R.zs=[]
+function endBoss(){for(const z of Z){spawnZ(z,false);z.z-=12}for(let i=0;i<3;i++)laneLast[i]=-VIEW}
+const laneMat=c=>new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0,depthWrite:false,toneMapped:false,fog:false});
+const warnQ=[0,1,2].map(i=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(1.04,1).rotateX(-Math.PI/2),laneMat(0xff2828));m.position.set(LANES[i],.02,0);m.visible=false;S.add(m);return m});
+const slamQ=[0,1,2].map(i=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(1.04,1).rotateX(-Math.PI/2),laneMat(0xffb43c));m.position.set(LANES[i],.021,0);m.visible=false;S.add(m);return m});
+function laneQuad(m,z0,z1){m.position.z=(z0+z1)/2;m.scale.set(1,1,Math.abs(z1-z0))}
+// v9 zombie HP bar (only when damaged): bg #14203a, fill #ff4a3a, 4px tall, 8px above head, width = zombie width (h*.6)
+const hbBg=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({color:0x14203a,depthWrite:false,toneMapped:false,fog:false}),64),hbFg=new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({color:0xff4a3a,depthWrite:false,toneMapped:false,fog:false}),64);
+for(const m of [hbBg,hbFg]){m.frustumCulled=false;m.count=0;m.renderOrder=5;S.add(m)}hbFg.renderOrder=6;
+const _cr=new THREE.Vector3(),_cu=new THREE.Vector3();
+function frame(fdt){
+ const dt=fdt||Math.min(clock.getDelta(),0.05);t+=dt;fcount++;
+ // phases (test loop): run with gates 9 s -> boss fight until boss HP 0 (or 20 s) -> run again
+ cyc+=dt;if(!PHASE){if(ph=='gate'&&cyc>9){ph='boss';cyc=0;startBoss()}else if(ph=='boss'&&(cyc>20||BS.dead>1.6)){ph='gate';cyc=0;endBoss()}}else if(PHASE=='boss'&&!BS.started){BS.started=1;startBoss()}
+ const dzv=ph=='boss'?0:CFG.SPEED*dt;   // v9 step(): R.z advances only when !R.fight -> road stops during the boss
  roadTex.offset.y+=dzv/K/20;curbTex.offset.y+=dzv/K/4;grassTex.offset.y+=dzv/K/4;for(const s of scrollers)s.upd(dzv/K);
- // phases: gate run, then boss walks in (boss never behind a gate panel)
- cyc+=dt;const ph=PHASE||(cyc%18<9?'gate':'boss');
  if(ph=='gate'){if(PHASE=='gate'&&Q.has('gz'))gateZ=+Q.get('gz');else{gateZ+=dzv;if(gateZ>1.5)gateZ=-30}}else gateZ=99;
  for(const g of gates){g.visible=gateZ<2;g.position.z=gateZ}
  // v9: squeeze formation when a gate is within .8*SPEED ahead
@@ -307,40 +337,69 @@ function frame(){
  const sS=1.5*0.432*SC/MODELS.sol.h;
  while(solPool.length<SQ.sq.length){const u=spawnUnit('sol','Run_Gun',1.1);u.g.rotation.y=Math.PI;solPool.push(u)}
  for(let i=0;i<solPool.length;i++){const u=solPool[i];const on=i<SQ.sq.length;u.g.visible=on;if(!on)continue;const q=SQ.sq[i];const x=SQ.x+q.ox,z=-q.oz;
-  u.g.position.set(x,0,z);u.g.scale.setScalar(sS);u.mx.update(dt);blob(x,z,0.26*SC);
+  u.g.position.set(x,0,z);u.g.scale.setScalar(sS);u.act.timeScale=u.act.getClip().duration*14/(2*Math.PI);u.mx.update(dt);blob(x,z,0.26*SC);
   q.fire-=dt;const gx=x+.062*SC,gy=.21*SC,gz=z-.14*SC;if(q.fire<=0){q.fire=.16+Math.random()*.04;fireBullet(gx,gy,gz);q.fl=.05}
   if(q.fl>0&&fi<110){q.fl-=dt;const sc=(.12+Math.random()*.06)*SC;_m.compose(_v.set(gx,gy,gz),cam.quaternion,_s.set(sc,sc,sc));flashes.setMatrixAt(fi++,_m);_s.set(1,1,1)}}
- // zombies (v9 heights .78*sz)
- while(zUnits.length<ZN){const z=Z[zUnits.length];const u=spawnUnit('zom','run',.55*z.spd*(z.type=='fast'?1.4:1));zUnits.push(u)}
+ // zombies (v9 heights .78*sz). v9 step(): stand still until within WALK=26 m, then walk at ZSPD*spd; road carries them at SPEED.
+ // anim: idle while standing; idle+run blend while walking with timeScale set from measured foot speed -> planted foot moves exactly with the road
+ while(zUnits.length<ZN){const u=spawnUnit('zom','run',1);u.idle=u.mx.clipAction(clip(MODELS.zom,'idle'));u.idle.play();u.idle.time=Math.random();u.w=0;zUnits.push(u)}
+ let hbn=0;_cr.set(1,0,0).applyQuaternion(cam.quaternion);_cu.set(0,1,0).applyQuaternion(cam.quaternion);const Fh=H/2/Math.tan(cam.fov*Math.PI/360);
  for(let i=0;i<ZN;i++){const z=Z[i],u=zUnits[i];
-  if(z.dead>0){z.dead+=dt;if(z.dead>1.4){spawnZ(z,true);u.g.rotation.x=0}}
-  else{z.z+=(CFG.SPEED+ZSPD*(z.type=='fast'?1.6:1))*dt;if(z.kb>0){z.z-=z.kb*dt*3;z.kb=Math.max(0,z.kb-dt*4)}if(z.z>-0.6){spawnZ(z,true)}}
+  if(z.off){u.g.visible=false;continue}
+  z.hit=Math.max(0,z.hit-dt);
+  let walk=0;
+  if(z.dead>0){z.dead+=dt;z.z+=dzv;if(z.dead>1.4){spawnZ(z,true);u.g.rotation.x=0}}
+  else{const e=ENEMY[z.type];if(-z.z<WALK){walk=ZSPD*e.spd;}z.z+=dzv+walk*dt;if(z.z>-0.6){spawnZ(z,true)}}
+  laneLast[z.li]=Math.max(-VIEW-12,laneLast[z.li]);
   if(z.justDied){z.justDied=0;u.g.rotation.x=0}
-  const hz=.78*z.sz,s=hz/MODELS.zom.h,sink=z.dead>.6?(z.dead-.6)*.6:0;
-  u.g.visible=z.z>-VIEW;u.g.position.set(z.x,-sink,z.z);u.g.scale.set(s*z.fat,s,s*z.fat);
+  const hz=.78*z.sz,s=hz/MODELS.zom.h,sink=z.dead>.6?(z.dead-.6)*.6:0,vz=z.z-z.hit*1.2;   // v9 draw: hit pushes the sprite back by hit*1.2
+  u.g.visible=z.z>-VIEW;u.g.position.set(z.x,-sink,vz);u.g.scale.set(s*z.fat,s,s*z.fat);
   u.g.rotation.x=z.dead>0?-Math.min(1,z.dead/.35)*1.45:0;   // falls backward (no flash, no shake)
-  if(z.dead<=0||z.dead<.35){u.mx.update(z.dead>0?dt*.3:dt);rigApply(u,z.z>-2.2?1:0,dt)}if(z.dead<=0&&u.g.visible)blob(z.x,z.z,hz*.6)}
+  const wt=walk>0?MODELS.zom.WB:0;u.w+=(wt-u.w)*Math.min(1,dt*6);u.act.setEffectiveWeight(u.w);u.idle.setEffectiveWeight(1-u.w);
+  if(walk>0)u.act.timeScale=walk/(MODELS.zom.footV*s*z.fat);
+  if(z.dead<=0||z.dead<.35){u.mx.update(z.dead>0?dt*.3:dt);rigApply(u,z.z>-2.2?1:0,dt)}if(z.dead<=0&&u.g.visible)blob(z.x,vz,hz*.6);
+  if(z.dead<=0&&u.g.visible&&z.hp<z.max&&hbn<64){const w=hz*.6,d=_v.set(z.x,hz,vz).applyMatrix4(cam.matrixWorldInverse).z*-1,px=d/Fh,bh=4*px,y=hz+8*px+bh/2,f=Math.max(0,z.hp/z.max);
+   _m.compose(_v.set(z.x,y,vz),cam.quaternion,_s.set(w+2*px,bh+2*px,1));hbBg.setMatrixAt(hbn,_m);
+   _m.compose(_v.set(z.x,y,vz).addScaledVector(_cr,-(w*(1-f))/2).addScaledVector(_cu,0),cam.quaternion,_s.set(w*f,bh,1));hbFg.setMatrixAt(hbn,_m);_s.set(1,1,1);hbn++}}
+ hbBg.count=hbFg.count=hbn;hbBg.instanceMatrix.needsUpdate=hbFg.instanceMatrix.needsUpdate=true;
  // boss: v9 height 2.5, tank silhouette (wider, stockier)
- if(!bossU){bossU=spawnUnit('orc','run',.38)}
- boss.visible=bossU.g.visible=ph=='boss';if(ph=='boss'){if(PHASE=='boss')bossZ=+(Q.get('bz')||-12);else{bossZ+=dt*.5;if(bossZ>-7)bossZ=-16}}else bossZ=-16;
- {const bs=2.5/MODELS.orc.h;bossU.g.position.set(0,0,bossZ);bossU.g.scale.setScalar(bs);boss.position.set(0,0,bossZ);if(boss.visible){bossU.mx.update(dt);rigApply(bossU,0,dt)}}   // uniform scale only (v9 boss h=2.5)
+ if(!bossU){bossU=spawnUnit('orc','idle',.7)}
+ boss.visible=bossU.g.visible=ph=='boss';bossZ=Q.has('bz')?+Q.get('bz'):-7;   // v9 startBoss: z=R.z+7 (7 m in front of the squad front line), never walks
+ let atk=0,slam=0;
+ if(ph=='boss'&&!BS.dead){BS.ft=(BS.ft||0)+dt;const c=BS.cfg;
+  if(!BS.att){BS.next-=dt;if(BS.next<=0){const half=BS.hp<BS.max*.5,safe=Math.random()*3|0,my=LANES.map(x=>Math.abs(x-SQ.x)).reduce((a,v,i,arr)=>v<arr[a]?i:a,0);BS.att={lanes:half?[0,1,2].filter(i=>i!=safe):[my],t:c.warn,w:c.warn};BS.next=c.int-c.warn}}
+  else{BS.att.t-=dt;if(BS.att.t<=0){BS.slam={lanes:BS.att.lanes,t:.35};BS.att=null}}
+  if(BS.slam){BS.slam.t-=dt;if(BS.slam.t<=0)BS.slam=null}
+  if(BS.att)atk=Math.min(1,1-BS.att.t/BS.att.w);if(BS.slam)slam=BS.slam.t/.35}
+ // v9 red blinking warning lanes (camZ+.5 .. boss z) and orange slam lanes
+ for(let i=0;i<3;i++){const wq=warnQ[i],sq=slamQ[i];const on=ph=='boss'&&BS.att&&BS.att.lanes.includes(i);wq.visible=!!on;if(on){laneQuad(wq,CFG.CAMD-.5,bossZ);wq.material.opacity=.35+.3*Math.abs(Math.sin(t*14))}
+  const so=ph=='boss'&&BS.slam&&BS.slam.lanes.includes(i);sq.visible=!!so;if(so){laneQuad(sq,CFG.CAMD-.5,bossZ);sq.material.opacity=BS.slam.t*1.6}}
+ {const bs=2.5/MODELS.orc.h,br=1+.025*Math.sin(t*Math.PI*2/1.8),hb=2.5;   // v9 A.drawBoss: breathe, wind-up lean+lift, slam squash
+  if(BS.dead){BS.dead+=dt}
+  bossU.g.position.set(0,hb*.05*atk-(BS.dead>.6?(BS.dead-.6)*.8:0),bossZ);bossU.g.scale.set(bs*(1+.04*slam),bs*br*(1-.08*slam),bs);
+  bossU.g.rotation.x=BS.dead?-Math.min(1,BS.dead/.6)*1.35:(-.07*atk+.06*slam);boss.position.set(0,0,bossZ);
+  if(boss.visible){bossU.mx.update(dt);rigApply(bossU,0,dt);const B_=bossU.B;
+   if(atk>0){wAim(B_.LeftArm,B_.LeftForeArm,.35,2.2,.25,atk);wAim(B_.RightArm,B_.RightForeArm,-.35,2.2,.25,atk)}           // arms raised over the head
+   if(slam>0){wAim(B_.LeftArm,B_.LeftForeArm,.2,-1.1,1,slam);wAim(B_.RightArm,B_.RightForeArm,-.2,-1.1,1,slam)}}}         // smashed down in front
+ {const bb=document.getElementById('bb');bb.style.display=ph=='boss'?'block':'none';if(ph=='boss'){const f=Math.max(0,BS.hp/BS.max);document.getElementById('bbt').textContent=`보스  ${(f*100).toFixed(0)}%`;document.getElementById('bbi').style.width=(layoutBB.bw*f)+'px'}}
  }
  {const v=new THREE.Vector3(SQ.x,.62*SC+.12,0).project(cam);const el=document.getElementById('cnt');el.style.left=((v.x+1)/2*100)+'%';el.style.top=((1-v.y)/2*100)+'%';}
  flashes.count=fi;flashes.instanceMatrix.needsUpdate=true;
  // bullets: v=45, straight
  let bn=0;for(const b of B){if(!b.a)continue;b.z-=45*dt;if(b.z<-RANGE){b.a=0;continue}   // same logical metres as the distance lines
-  for(const z of Z){const hw=.15*z.sz+.08;if(z.dead<=0&&Math.abs(b.x-z.x)<hw&&b.z<z.z+.15&&b.z>z.z-.4){b.a=0;z.hp--;z.hit=1;z.kb=.15;puff(b.x,.35*z.sz,z.z+.1);if(z.hp<=0){z.dead=.001;z.justDied=1;for(let k=0;k<3;k++)puff(z.x+rnd(-.1,.1),rnd(.2,.6),z.z)}break}}
-  if(b.a&&boss.visible&&Math.abs(b.x)<.75&&b.z<bossZ+.4&&b.z>bossZ-.3){b.a=0;bossHit=1;puff(b.x,rnd(.5,1.8),bossZ+.4)}
+  for(const z of Z){const hw=.15*z.sz+.08;if(z.dead<=0&&Math.abs(b.x-z.x)<hw&&b.z<z.z+.15&&b.z>z.z-.4){b.a=0;z.hp--;z.hit=.08;puff(b.x,.35*z.sz,z.z+.1);if(z.hp<=0){z.dead=.001;z.justDied=1;for(let k=0;k<3;k++)puff(z.x+rnd(-.1,.1),rnd(.2,.6),z.z)}break}}
+  if(b.a&&boss.visible&&!BS.dead&&Math.abs(b.x)<1.7&&b.z<=bossZ+.5){b.a=0;bossHit=1;BS.hp=Math.max(0,BS.hp-1);if(BS.hp<=0)BS.dead=.001;puff(b.x,rnd(.5,1.8),bossZ+.5)}
   if(!b.a)continue;_m.compose(_v.set(b.x,b.y,b.z),_q.identity(),_s);bullets.setMatrixAt(bn++,_m)}
  bullets.count=bn;bullets.instanceMatrix.needsUpdate=true;
  let pn=0;for(const p of P){if(p.t<=0)continue;p.t-=dt;p.y+=dt*.5;const sc=.07*(p.t/.3);_m.compose(_v.set(p.x,p.y,p.z),_q.identity(),_s.set(sc,sc,sc));_s.set(1,1,1);puffs.setMatrixAt(pn++,_m)}
  puffs.count=pn;puffs.instanceMatrix.needsUpdate=true;blobs.count=blobN;blobs.instanceMatrix.needsUpdate=true;
+ if(Q.get('side')){const sv=Q.get('side');if(sv=='boss'){cam.position.set(1.55,1.3,bossZ+6.5);cam.lookAt(0,1.1,bossZ)}else{cam.position.set(1.5,.55,-15.5);cam.lookAt(-1.1,.3,-19.5)}cam.fov=40;cam.updateProjectionMatrix()}
  if(CLOSE){if(CLOSE=='zom'){const z=Z[0];z.dead=0;z.x=0;z.z=-5;for(let i=1;i<ZN;i++)if(Z[i].z>-9&&Z[i].z<-1)Z[i].z=-30;cam.position.set(.7,.75,-2.55);cam.lookAt(0,.38,-5)}
   else{cam.position.set(2.6,2.4,bossZ+7.8);cam.lookAt(0,1.15,bossZ)}bullets.visible=puffs.visible=flashes.visible=false;cam.fov=40;cam.clearViewOffset();cam.updateProjectionMatrix()}
  if(fcount%30==1){const py=(x,z)=>{const v=new THREE.Vector3(x,0,z).project(cam);return +((1-v.y)/2).toFixed(3)};
   const back=SQ.sq.length?Math.max(...SQ.sq.map(q=>-q.oz)):0;window.__camcheck={y_front:py(0,0),y_20:py(0,-20),y_30:py(0,-30),y_40:py(0,-40),y_60:py(0,-60),y_backrow:py(0,back),horizon:py(0,-2000),...window.__cam}}
  R.render(S,cam);
  const now=performance.now();if(now-t0>=1000){window.__fps=fcount*1000/(now-t0);fpsEl.textContent=window.__fps.toFixed(0)+' fps · '+R.info.render.calls+' draws';window.__calls=R.info.render.calls;window.__tris=R.info.render.triangles;fcount=0;t0=now}
- requestAnimationFrame(frame)}
-requestAnimationFrame(frame);
+ if(!MANUAL)requestAnimationFrame(()=>frame())}
+const MANUAL=Q.has('manual');if(MANUAL){window.__adv=(n,d)=>{for(let i=0;i<n;i++)frame(d)}}else requestAnimationFrame(()=>frame());
 </script></body></html>
