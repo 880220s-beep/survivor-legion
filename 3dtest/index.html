@@ -195,13 +195,14 @@ const _qa=new THREE.Quaternion(),_qb=new THREE.Quaternion(),_qc=new THREE.Quater
 function wLean(b,axis,ang){b.parent.getWorldQuaternion(_qb);_vc.copy(axis).applyQuaternion(_qo);_qa.setFromAxisAngle(_vc,ang);_qc.copy(_qb).invert().multiply(_qa).multiply(_qb);b.quaternion.premultiply(_qc);b.updateMatrixWorld(true)}
 function wAim(b,child,x,y,z,w){b.updateMatrixWorld(true);b.getWorldPosition(_va);child.getWorldPosition(_vb);_vb.sub(_va).normalize();_vc.set(x,y,z).normalize().applyQuaternion(_qo);
  _qa.setFromUnitVectors(_vb,_vc);b.getWorldQuaternion(_qb);_qa.multiply(_qb);b.parent.getWorldQuaternion(_qc);_qc.invert().multiply(_qa);b.quaternion.slerp(_qc,w);b.updateMatrixWorld(true)}
-function rigApply(u,att,dt){const B=u.B,O=u.M.opt;u.t2=(u.t2||Math.random()*6)+dt;const sw=Math.sin(u.t2*5.2)*.1;
+function rigApply(u,att,dt){const B=u.B,O=u.M.opt;u.t2=(u.t2||Math.random()*6)+dt;const sw=O.noSway?0:Math.sin(u.t2*5.2)*.1,fw=O.armFwd||1;
  u.o.updateMatrixWorld(true);u.o.getWorldQuaternion(_qo);
  wLean(B.Spine,_X,O.lean);wLean(B.UpperChest,_X,O.lean*.4);wLean(B.Head,_X,O.headTilt);if(O.headSide)wLean(B.Head,_Zx,O.headSide);
  B.LeftForeArm.quaternion.slerp(u.M.rig.foreL,.8);B.RightForeArm.quaternion.slerp(u.M.rig.foreR,.8);
  const k=att>0?(Math.sin(u.t2*9)+1)/2:0,up=att>0;
- wAim(B.LeftArm,B.LeftForeArm,O.armSpread+sw,up?-O.armDrop+k*1.4:-O.armDrop+sw,1,.9);
- wAim(B.RightArm,B.RightForeArm,-O.armSpread+sw,up?-O.armDrop+(1-k)*1.4:-O.armDrop*1.2-sw,1,.9)}
+ wAim(B.LeftArm,B.LeftForeArm,O.armSpread+sw,up?-O.armDrop+k*1.4:-O.armDrop+sw,fw,O.aimW||.9);
+ wAim(B.RightArm,B.RightForeArm,-O.armSpread+sw,up?-O.armDrop+(1-k)*1.4:-O.armDrop*(O.noSway?1:1.2)-sw,fw,O.aimW||.9)
+ if(O.straight){wAim(B.LeftForeArm,B.LeftHand,O.armSpread*.8,-O.armDrop*1.15,fw,1);wAim(B.RightForeArm,B.RightHand,-O.armSpread*.8,-O.armDrop*1.15,fw,1)}}
 async function loadModels(){
  const [sol,kz,kzS,kzE,kbS,kbE]=await Promise.all([glb('models/PpLF4rt4ah.glb'),glb('models/kzombie.glb'),tex('models/kz_skin.png'),tex('models/kz_emis.png'),tex('models/kb_skin.png'),tex('models/kb_emis.png')]);
  // soldier: bright blue uniform + helmet, olive gear, keep only the rifle (AK)  (unchanged)
@@ -233,7 +234,7 @@ function spawnUnit(key,anim,speed=1){const M=MODELS[key];const o=SkeletonUtils.c
  const mx=new THREE.AnimationMixer(o);const a=mx.clipAction(clip(M,anim||M.run));a.play();a.time=Math.random()*a.getClip().duration;a.timeScale=speed;return {g,o,mx,act:a,M,B:M.rig?bonesOf(o):null}}
 function playOnce(u,n){const c=clip(u.M,n);if(!c)return;const a=u.mx.clipAction(c);a.reset();a.setLoop(THREE.LoopOnce,1);a.clampWhenFinished=true;u.act.crossFadeTo(a,.1,false);a.play();u.cur=a}
 function backToRun(u){u.mx.stopAllAction();const a=u.mx.clipAction(clip(u.M,u.M.run));a.reset().play();a.time=Math.random();u.act=a}
-const solPool=[];const zUnits=[];let bossU=null;window.__ft=(k,i)=>{const u=k=='boss'?bossU:zUnits[i];if(!u)return null;u.o.updateMatrixWorld(true);const r=[];for(const n of ['LeftToes','RightToes']){const v=new THREE.Vector3();u.B[n].getWorldPosition(v);r.push([v.x,v.y,v.z])}return {feet:r,z:k=='boss'?bossZ:Z[i].z,walk:k=='boss'?0:(-Z[i].z<26&&!Z[i].dead)?1:0,dead:k=='boss'?BS.dead:Z[i].dead,ph}};window.__dbg=()=>{const u=zUnits[0];const B=u.B;const v=new THREE.Vector3(),w=new THREE.Vector3();u.o.updateMatrixWorld(true);B.LeftArm.getWorldPosition(v);B.LeftForeArm.getWorldPosition(w);return {dir:w.sub(v).normalize().toArray(),q:B.LeftArm.quaternion.toArray(),tgt:u.M.rig.armL.toArray(),hips:B.Hips.quaternion.toArray(),root:u.o.children.map(c=>c.name+":"+c.type),rootRot:u.o.rotation.toArray()}};
+const solPool=[];const zUnits=[];let bossU=null;window.__bw=(k,i)=>{const g=k=='z'?zUnits[i].g:bossU.g;g.updateMatrixWorld(true);const v=new THREE.Vector3();let mn=1e9,mx=-1e9,mny=1e9,mxy=-1e9;g.traverse(o=>{if(o.isSkinnedMesh){const p=o.geometry.attributes.position;for(let i=0;i<p.count;i+=3){o.getVertexPosition(i,v);v.applyMatrix4(o.matrixWorld);mn=Math.min(mn,v.x);mx=Math.max(mx,v.x);mny=Math.min(mny,v.y);mxy=Math.max(mxy,v.y)}}});const hp=n=>{const B_=(k=='z'?zUnits[i]:bossU).B;B_[n].getWorldPosition(v);return +v.x.toFixed(2)};return {handL:hp('LeftHand'),handR:hp('RightHand'),xmin:mn,xmax:mx,width:mx-mn,h:mxy-mny,type:k=='z'?Z[i].type:'boss',hw:k=='z'?.15*Z[i].sz+.08:1.7}};window.__ft=(k,i)=>{const u=k=='boss'?bossU:zUnits[i];if(!u)return null;u.o.updateMatrixWorld(true);const r=[];for(const n of ['LeftToes','RightToes']){const v=new THREE.Vector3();u.B[n].getWorldPosition(v);r.push([v.x,v.y,v.z])}return {feet:r,z:k=='boss'?bossZ:Z[i].z,walk:k=='boss'?0:(-Z[i].z<26&&!Z[i].dead)?1:0,dead:k=='boss'?BS.dead:Z[i].dead,ph}};window.__dbg=()=>{const u=zUnits[0];const B=u.B;const v=new THREE.Vector3(),w=new THREE.Vector3();u.o.updateMatrixWorld(true);B.LeftArm.getWorldPosition(v);B.LeftForeArm.getWorldPosition(w);return {dir:w.sub(v).normalize().toArray(),q:B.LeftArm.quaternion.toArray(),tgt:u.M.rig.armL.toArray(),hips:B.Hips.quaternion.toArray(),root:u.o.children.map(c=>c.name+":"+c.type),rootRot:u.o.rotation.toArray()}};
 const blobs=new THREE.InstancedMesh(blobGeo,blobMat,260);blobs.frustumCulled=false;S.add(blobs);let blobN=0;
 function blob(x,z,s){_m.compose(_v.set(x,0.004,z),_q.identity(),_s.set(s,1,s*0.6));blobs.setMatrixAt(blobN++,_m);_s.set(1,1,1)}
 
@@ -309,7 +310,7 @@ const root=new THREE.Matrix4();let bi=0;
 function fireBullet(x,y,z){const b=B[bi];bi=(bi+1)%BN;b.a=1;b.x=x;b.y=y;b.z=z}
 let cyc=0,ph=PHASE||'gate';
 // v9 boss (startBoss/bossStep): appears at R.z+7, stands, lane slam: warn -> slam .35s; <50% HP two lanes (one safe). S5 cfg warn 1.2 / int 5 / first 4
-const BS={hp:1,max:1,next:4,att:null,slam:null,dead:0,cfg:{warn:1.2,int:5,first:4}};
+window.__bsx=()=>({hp:BS.hp,max:BS.max,minX:Math.min(...B.filter(b=>b.a).map(b=>b.x)),maxX:Math.max(...B.filter(b=>b.a).map(b=>b.x)),sqx:SQ.x});const BS={hp:1,max:1,next:4,att:null,slam:null,dead:0,cfg:{warn:1.2,int:5,first:4}};
 function startBoss(){BS.max=BS.hp=Math.max(600,SQ.n*55);BS.next=BS.cfg.first;BS.att=null;BS.slam=null;BS.dead=0;BS.ft=0;for(const z of Z){z.off=1}}   // v9: R.zs=[]
 function endBoss(){for(const z of Z){spawnZ(z,false);z.z-=12}for(let i=0;i<3;i++)laneLast[i]=-VIEW}
 const laneMat=c=>new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0,depthWrite:false,toneMapped:false,fog:false});
@@ -386,14 +387,16 @@ function frame(fdt){
  {const v=new THREE.Vector3(SQ.x,.62*SC+.12,0).project(cam);const el=document.getElementById('cnt');el.style.left=((v.x+1)/2*100)+'%';el.style.top=((1-v.y)/2*100)+'%';}
  flashes.count=fi;flashes.instanceMatrix.needsUpdate=true;
  // bullets: v=45, straight
- let bn=0;for(const b of B){if(!b.a)continue;b.z-=45*dt;if(b.z<-RANGE){b.a=0;continue}   // same logical metres as the distance lines
-  for(const z of Z){const hw=.15*z.sz+.08;if(z.dead<=0&&Math.abs(b.x-z.x)<hw&&b.z<z.z+.15&&b.z>z.z-.4){b.a=0;z.hp--;z.hit=.08;puff(b.x,.35*z.sz,z.z+.1);if(z.hp<=0){z.dead=.001;z.justDied=1;for(let k=0;k<3;k++)puff(z.x+rnd(-.1,.1),rnd(.2,.6),z.z)}break}}
-  if(b.a&&boss.visible&&!BS.dead&&Math.abs(b.x)<1.7&&b.z<=bossZ+.5){b.a=0;bossHit=1;BS.hp=Math.max(0,BS.hp-1);if(BS.hp<=0)BS.dead=.001;puff(b.x,rnd(.5,1.8),bossZ+.5)}
+ let bn=0;for(const b of B){if(!b.a)continue;const zp=b.z;b.z-=45*dt;if(b.z<-RANGE){b.a=0;continue}   // same logical metres as the distance lines
+  // v9 moveBullets: boss first (|boss.x-b.x|<1.7, b past boss.z-.5), then nearest zombie with |zb.x-b.x|<=.15*sz+.08 inside the swept window zp-.35..b.z+.35
+  if(!(b.a&&boss.visible&&!BS.dead&&Math.abs(b.x)<1.7&&b.z<=bossZ+.5)){let best=null;for(const z of Z){if(z.dead>0||z.off||Math.abs(z.x-b.x)>.15*z.sz+.08||z.z>zp+.35||z.z<b.z-.35)continue;if(!best||z.z>best.z)best=z}
+   if(best){const z=best;b.a=0;z.hp--;z.hit=.08;puff(b.x,.35*z.sz,z.z+.1);if(z.hp<=0){z.dead=.001;z.justDied=1;for(let k=0;k<3;k++)puff(z.x+rnd(-.1,.1),rnd(.2,.6),z.z)}}}
+  if(b.a&&boss.visible&&!BS.dead&&Math.abs(b.x)<1.7&&b.z<=bossZ+.5){b.a=0;bossHit=1;BS.hp=Math.max(0,BS.hp-1);if(BS.hp<=0)BS.dead=.001;puff(b.x,rnd(.5,1.8),bossZ+.5)}   // v9: spark(b.x,boss.z-.4) at the bullet's own x
   if(!b.a)continue;_m.compose(_v.set(b.x,b.y,b.z),_q.identity(),_s);bullets.setMatrixAt(bn++,_m)}
  bullets.count=bn;bullets.instanceMatrix.needsUpdate=true;
  let pn=0;for(const p of P){if(p.t<=0)continue;p.t-=dt;p.y+=dt*.5;const sc=.07*(p.t/.3);_m.compose(_v.set(p.x,p.y,p.z),_q.identity(),_s.set(sc,sc,sc));_s.set(1,1,1);puffs.setMatrixAt(pn++,_m)}
  puffs.count=pn;puffs.instanceMatrix.needsUpdate=true;blobs.count=blobN;blobs.instanceMatrix.needsUpdate=true;
- if(Q.get('side')){const sv=Q.get('side');if(sv=='boss'){cam.position.set(1.55,1.3,bossZ+6.5);cam.lookAt(0,1.1,bossZ)}else{cam.position.set(1.5,.55,-15.5);cam.lookAt(-1.1,.3,-19.5)}cam.fov=40;cam.updateProjectionMatrix()}
+ if(Q.get('side')){const sv=Q.get('side');if(sv=='boss'){cam.position.set(1.55,1.3,bossZ+6.5);cam.lookAt(0,1.1,bossZ)}else if(sv=='front'){cam.position.set(0,1.4,bossZ+7.5);cam.lookAt(0,1.1,bossZ)}else{cam.position.set(1.5,.55,-15.5);cam.lookAt(-1.1,.3,-19.5)}cam.fov=40;cam.updateProjectionMatrix()}
  if(CLOSE){if(CLOSE=='zom'){const z=Z[0];z.dead=0;z.x=0;z.z=-5;for(let i=1;i<ZN;i++)if(Z[i].z>-9&&Z[i].z<-1)Z[i].z=-30;cam.position.set(.7,.75,-2.55);cam.lookAt(0,.38,-5)}
   else{cam.position.set(2.6,2.4,bossZ+7.8);cam.lookAt(0,1.15,bossZ)}bullets.visible=puffs.visible=flashes.visible=false;cam.fov=40;cam.clearViewOffset();cam.updateProjectionMatrix()}
  if(fcount%30==1){const py=(x,z)=>{const v=new THREE.Vector3(x,0,z).project(cam);return +((1-v.y)/2).toFixed(3)};
